@@ -6,28 +6,7 @@ const DEMO_PHONE = '13800000000'
 const DEMO_PASSWORD = '123456'
 
 /** 进程内预约表；刷新 dev server 会回到下面两条示例 */
-let bookings = [
-  {
-    id: 'b1',
-    weekday: 1,
-    startHour: 9,
-    serviceId: 's1',
-    serviceName: '服务1',
-    durationHours: 1,
-    contactName: '张三',
-    remark: '示例：占 1 小时',
-  },
-  {
-    id: 'b2',
-    weekday: 3,
-    startHour: 14,
-    serviceId: 's2',
-    serviceName: '服务2',
-    durationHours: 2,
-    contactName: '李四',
-    remark: '示例：连占 14:00–16:00',
-  },
-]
+let bookings = []
 
 /**
  * Mock 只认演示 token，无头或错 token 一律当未登录。
