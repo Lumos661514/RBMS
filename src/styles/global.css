@@ -1,0 +1,23 @@
+/* 全局骨架：PC 后台最小宽度，避免表格被挤乱 */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-width: 1000px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #1f2933;
+  background: #f3f4f6;
+}
+
+/* 表单控件继承页面字体，避免按钮比表格字号跳变 */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
