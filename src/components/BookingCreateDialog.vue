@@ -10,8 +10,8 @@ const props = defineProps({
   startHour: { type: Number, default: null },
   /** 当前选中的服务 id */
   serviceId: { type: String, required: true },
-  /** 客户姓名，提交前必填 */
-  contactName: { type: String, required: true },
+  /** 当前登录用户姓名，预约会绑到此人，不可改 */
+  bookerName: { type: String, required: true },
   /** 可选备注 */
   remark: { type: String, required: true },
   /** 接口或校验失败文案 */
@@ -20,7 +20,7 @@ const props = defineProps({
   submitting: { type: Boolean, default: false },
 })
 
-const emit = defineEmits(['close', 'submit', 'update:serviceId', 'update:contactName', 'update:remark'])
+const emit = defineEmits(['close', 'submit', 'update:serviceId', 'update:remark'])
 
 /** 用来预告将占用到几点 */
 const selectedService = computed(() => getServiceById(props.serviceId))
@@ -54,15 +54,12 @@ function padHour(hour) {
         {{ padHour(startHour) }}:00–
         {{ padHour(startHour + selectedService.durationHours) }}:00
       </p>
-      <label>
-        客户姓名
-        <input :value="contactName" type="text" @input="emit('update:contactName', $event.target.value)" />
-      </label>
+      <p class="booking-create-dialog-hint">预约人：{{ bookerName }}（当前登录账号）</p>
       <label>
         备注（可选）
         <input :value="remark" type="text" @input="emit('update:remark', $event.target.value)" />
       </label>
-      <!-- 姓名校验失败或时段冲突 -->
+      <!-- 时段冲突等失败文案 -->
       <p v-if="error" class="booking-create-dialog-error">{{ error }}</p>
       <div class="booking-create-dialog-actions">
         <button type="button" class="booking-create-dialog-ghost" @click="emit('close')">取消</button>

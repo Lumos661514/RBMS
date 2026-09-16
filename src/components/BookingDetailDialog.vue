@@ -6,6 +6,8 @@ defineProps({
   booking: { type: Object, required: true },
   /** 取消请求进行中 */
   cancelling: { type: Boolean, default: false },
+  /** 管理员或预约归属自己时才显示取消 */
+  canCancel: { type: Boolean, default: false },
 })
 
 defineEmits(['close', 'cancel'])
@@ -26,7 +28,7 @@ function bookingEndLabel(booking) {
     <div class="booking-detail-dialog-panel" role="dialog">
       <h2>预约详情</h2>
       <p>服务：{{ booking.serviceName }}</p>
-      <p>客户：{{ booking.contactName }}</p>
+      <p>预约人：{{ booking.contactName }}</p>
       <p>
         时间：{{ WEEKDAY_LABELS[booking.weekday] }}
         {{ bookingEndLabel(booking) }}
@@ -36,6 +38,7 @@ function bookingEndLabel(booking) {
       <div class="booking-detail-dialog-actions">
         <button type="button" class="booking-detail-dialog-ghost" @click="$emit('close')">关闭</button>
         <button
+          v-if="canCancel"
           type="button"
           class="booking-detail-dialog-danger"
           :disabled="cancelling"

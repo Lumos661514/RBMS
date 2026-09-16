@@ -1,13 +1,13 @@
 <script setup>
 import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { login } from '@/api/auth'
-import { NAME_KEY, TOKEN_KEY } from '@/api/request'
+import { saveSession } from '@/api/request'
 
 const route = useRoute()
 const router = useRouter()
 
-/** 演示账号预填，与 Mock 写死的手机号一致 */
+/** 演示账号预填，与内置管理员一致 */
 const phone = ref('13800000000')
 /** 演示密码预填 */
 const password = ref('123456')
@@ -17,7 +17,7 @@ const errorText = ref('')
 const submitting = ref(false)
 
 /**
- * 提交登录；成功后写入 token，跳回守卫记下的页面。
+ * 提交登录；成功后写入 token，默认进预约看板。
  */
 async function onSubmit() {
   errorText.value = ''
@@ -28,8 +28,7 @@ async function onSubmit() {
   submitting.value = true
   try {
     const data = await login({ phone: phone.value.trim(), password: password.value })
-    localStorage.setItem(TOKEN_KEY, data.token)
-    localStorage.setItem(NAME_KEY, data.name)
+    saveSession(data)
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/board'
     await router.replace(redirect)
   } catch (error) {
@@ -37,6 +36,11 @@ async function onSubmit() {
   } finally {
     submitting.value = false
   }
+}
+
+/** 忘记密码第一版不做流程，只提示。 */
+function onForgot() {
+  window.alert('忘记密码功能暂未开放')
 }
 </script>
 
@@ -52,9 +56,13 @@ async function onSubmit() {
         密码
         <input v-model="password" type="password" autocomplete="current-password" />
       </label>
+      <div class="login-extra">
+        <RouterLink class="login-extra-link" to="/register">注册账号</RouterLink>
+        <button type="button" class="login-extra-link" @click="onForgot">忘记密码</button>
+      </div>
       <!-- 登录失败或校验失败时展示，成功则跳走 -->
       <p v-if="errorText" class="login-error">{{ errorText }}</p>
-      <button type="submit" :disabled="submitting">
+      <button type="submit" class="login-submit" :disabled="submitting">
         {{ submitting ? '登录中…' : '登录' }}
       </button>
     </form>
@@ -102,13 +110,28 @@ async function onSubmit() {
   border-radius: 4px;
 }
 
+.login-extra {
+  display: flex;
+  justify-content: space-between;
+}
+
+.login-extra-link {
+  border: 0;
+  padding: 0;
+  background: none;
+  color: #1f4e79;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+
 .login-error {
   margin: 0;
   color: #c81e1e;
   font-size: 13px;
 }
 
-.login-card button {
+.login-submit {
   margin-top: 4px;
   padding: 10px;
   border: 0;
@@ -118,7 +141,7 @@ async function onSubmit() {
   cursor: pointer;
 }
 
-.login-card button:disabled {
+.login-submit:disabled {
   opacity: 0.65;
   cursor: not-allowed;
 }

@@ -1,0 +1,66 @@
+{
+  "users": [
+    {
+      "id": "u-admin",
+      "phone": "13800000000",
+      "password": "123456",
+      "name": "管理员",
+      "role": "admin",
+      "builtin": true
+    },
+    {
+      "id": "u-1789520601630",
+      "phone": "15158572063",
+      "password": "123456",
+      "name": "蔡博闻",
+      "role": "user",
+      "builtin": false
+    },
+    {
+      "id": "u-1789520735607",
+      "phone": "18815178679",
+      "password": "123456",
+      "name": "蔡博韬",
+      "role": "user",
+      "builtin": false
+    }
+  ],
+  "bookings": [
+    {
+      "id": "b-1789520740493",
+      "weekday": 1,
+      "startHour": 9,
+      "serviceId": "s1",
+      "serviceName": "服务1",
+      "durationHours": 1,
+      "userId": "u-1789520735607",
+      "contactName": "蔡博韬",
+      "remark": ""
+    },
+    {
+      "id": "b-1789520755841",
+      "weekday": 1,
+      "startHour": 10,
+      "serviceId": "s1",
+      "serviceName": "服务1",
+      "durationHours": 1,
+      "userId": "u-admin",
+      "contactName": "管理员",
+      "remark": ""
+    }
+  ],
+  "settings": {
+    "slotHours": 1,
+    "startHour": 9,
+    "endHour": 18,
+    "weekDays": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      0
+    ]
+  }
+}

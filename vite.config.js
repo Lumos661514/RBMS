@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 export default defineConfig(({ command }) => ({
   plugins: [
     vue(),
-    // 开发态拦截 /api，预约存在内存，刷新进程会清空
+    // 开发态拦截 /api；写入走 mock/store.json，重启不会丢注册用户
     viteMockServe({
       mockPath: 'mock',
       enable: command === 'serve',

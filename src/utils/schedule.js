@@ -12,26 +12,30 @@ function padHour(hour) {
 }
 
 /**
- * 按营业配置生成时段行，避免模板写死 10 行。
+ * 按营业配置生成时段行，避免模板写死行数。
+ * @param {number} [startHour]
+ * @param {number} [endHour]
+ * @param {number} [slotHours]
  * @returns {{ startHour: number, label: string }[]}
  */
-export function buildTimeRows() {
+export function buildTimeRows(startHour = START_HOUR, endHour = END_HOUR, slotHours = SLOT_HOURS) {
   const rows = []
-  for (let hour = START_HOUR; hour < END_HOUR; hour += SLOT_HOURS) {
+  for (let hour = startHour; hour < endHour; hour += slotHours) {
     rows.push({
       startHour: hour,
-      label: `${padHour(hour)}:00-${padHour(hour + SLOT_HOURS)}:00`,
+      label: `${padHour(hour)}:00-${padHour(hour + slotHours)}:00`,
     })
   }
   return rows
 }
 
 /**
- * 按 WEEK_DAYS 生成星期列（列数随配置变，不是写死 7 列）。
+ * 按营业日生成星期列（列数随配置变，不是写死 7 列）。
+ * @param {number[]} [weekDays]
  * @returns {{ weekday: number, label: string }[]}
  */
-export function buildWeekColumns() {
-  return WEEK_DAYS.map((weekday) => ({
+export function buildWeekColumns(weekDays = WEEK_DAYS) {
+  return weekDays.map((weekday) => ({
     weekday,
     label: WEEKDAY_LABELS[weekday],
   }))
@@ -120,13 +124,22 @@ export function findBookingAtCell(bookings, weekday, startHour) {
  * @param {number} weekday
  * @param {number} startHour
  * @param {number} durationHours
+ * @param {number} [endHour] 当天营业结束整点（不含）
+ * @param {number} [slotHours] 一格对应的小时数
  * @returns {{ ok: boolean, message?: string }}
  */
-export function canCreateBooking(bookings, weekday, startHour, durationHours) {
-  if (startHour + durationHours > END_HOUR) {
+export function canCreateBooking(
+  bookings,
+  weekday,
+  startHour,
+  durationHours,
+  endHour = END_HOUR,
+  slotHours = SLOT_HOURS,
+) {
+  if (startHour + durationHours > endHour) {
     return { ok: false, message: '超出当天营业时间' }
   }
-  for (let hour = startHour; hour < startHour + durationHours; hour += SLOT_HOURS) {
+  for (let hour = startHour; hour < startHour + durationHours; hour += slotHours) {
     if (isCellOccupied(bookings, weekday, hour)) {
       return { ok: false, message: '该时段已被预约' }
     }

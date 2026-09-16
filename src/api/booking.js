@@ -9,8 +9,8 @@ export function getBookings(weekStart) {
 }
 
 /**
- * 创建预约；服务耗时由 Mock 按 serviceId 计算。
- * @param {{ weekday: number, startHour: number, serviceId: string, contactName: string, remark?: string }} payload
+ * 创建预约；服务耗时与当前登录用户由 Mock 写入。
+ * @param {{ weekday: number, startHour: number, serviceId: string, remark?: string }} payload
  */
 export function createBooking(payload) {
   return request.post('/bookings', payload)

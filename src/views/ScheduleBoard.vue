@@ -1,9 +1,8 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, ref } from 'vue'
+import { NAME_KEY, ROLE_KEY, USER_ID_KEY } from '@/api/request'
+import { getSettings } from '@/api/settings'
 import { cancelBooking, createBooking, getBookings } from '@/api/booking'
-import { NAME_KEY, TOKEN_KEY } from '@/api/request'
-import { END_HOUR, SLOT_HOURS, START_HOUR } from '@/config/schedule'
 import { SERVICES } from '@/config/services'
 import BookingCreateDialog from '@/components/BookingCreateDialog.vue'
 import BookingDetailDialog from '@/components/BookingDetailDialog.vue'
@@ -17,13 +16,25 @@ import {
   getMonday,
 } from '@/utils/schedule'
 
-const router = useRouter()
-/** 顶栏展示，来自登录返回的 name */
-const adminName = ref(localStorage.getItem(NAME_KEY) || '')
+/** 当前登录者姓名，预约会绑到这个人 */
+const bookerName = localStorage.getItem(NAME_KEY) || ''
+/** 当前登录角色，管理员可取消任意预约 */
+const role = localStorage.getItem(ROLE_KEY) || ''
+/** 普通用户只能取消自己的单 */
+const userId = localStorage.getItem(USER_ID_KEY) || ''
 
-/** 由配置生成，改 START/END/WEEK_DAYS 后表格跟着变 */
-const timeRows = buildTimeRows()
-const weekColumns = buildWeekColumns()
+/** 营业设置，来自接口而不是写死在页面里 */
+const settings = ref({
+  slotHours: 1,
+  startHour: 9,
+  endHour: 18,
+  weekDays: [1, 2, 3, 4, 5, 6],
+})
+
+const timeRows = computed(() =>
+  buildTimeRows(settings.value.startHour, settings.value.endHour, settings.value.slotHours),
+)
+const weekColumns = computed(() => buildWeekColumns(settings.value.weekDays))
 const monday = getMonday()
 const weekStart = formatISODate(monday)
 
@@ -42,13 +53,11 @@ const createWeekday = ref(null)
 const createStartHour = ref(null)
 /** 弹窗里选中的服务 */
 const createServiceId = ref(SERVICES[0].id)
-/** 客户姓名 */
-const createContactName = ref('')
 /** 可选备注 */
 const createRemark = ref('')
 /** 创建请求进行中，防连点 */
 const submitting = ref(false)
-/** 创建失败或姓名未填 */
+/** 创建失败文案 */
 const createError = ref('')
 
 /** 已占格弹窗是否打开 */
@@ -76,7 +85,7 @@ function cellBooking(weekday, startHour) {
 }
 
 /**
- * 已占格展示「服务 / 客户」。
+ * 已占格展示「服务 / 预约人」。
  * @param {{ serviceName: string, contactName: string } | null} booking
  */
 function cellLabel(booking) {
@@ -102,17 +111,24 @@ function isMergedContinuation(weekday, startHour) {
 function busyRowSpan(weekday, startHour) {
   const booking = cellBooking(weekday, startHour)
   if (!booking) return 1
-  return booking.durationHours / SLOT_HOURS
+  return booking.durationHours / settings.value.slotHours
+}
+
+/** 管理员或预约归属自己时才能取消。 */
+function canCancelDetail() {
+  if (!detailBooking.value) return false
+  return role === 'admin' || detailBooking.value.userId === userId
 }
 
 /**
- * 拉本周预约；失败可重试，不把占用写死在页面里。
+ * 同时拉营业设置和预约；失败可重试。
  */
-async function loadBookings() {
+async function loadBoard() {
   loading.value = true
   loadError.value = ''
   try {
-    const data = await getBookings(weekStart)
+    const [nextSettings, data] = await Promise.all([getSettings(), getBookings(weekStart)])
+    settings.value = nextSettings
     bookings.value = data.list || []
   } catch (error) {
     loadError.value = error.message || '加载失败'
@@ -136,7 +152,6 @@ function onCellClick(weekday, startHour) {
   createWeekday.value = weekday
   createStartHour.value = startHour
   createServiceId.value = SERVICES[0].id
-  createContactName.value = ''
   createRemark.value = ''
   createError.value = ''
   createOpen.value = true
@@ -152,25 +167,20 @@ function closeDetail() {
 }
 
 /**
- * 提交预约；防连点。冲突/超时由接口返回文案。
+ * 提交预约；防连点。预约人固定为当前登录用户。
  */
 async function submitCreate() {
   createError.value = ''
-  if (!createContactName.value.trim()) {
-    createError.value = '请填写客户姓名'
-    return
-  }
   submitting.value = true
   try {
     await createBooking({
       weekday: createWeekday.value,
       startHour: createStartHour.value,
       serviceId: createServiceId.value,
-      contactName: createContactName.value.trim(),
       remark: createRemark.value.trim(),
     })
     createOpen.value = false
-    await loadBookings()
+    await loadBoard()
   } catch (error) {
     createError.value = error.message || '创建失败'
   } finally {
@@ -187,7 +197,7 @@ async function submitCancel() {
   try {
     await cancelBooking(detailBooking.value.id)
     closeDetail()
-    await loadBookings()
+    await loadBoard()
   } catch (error) {
     window.alert(error.message || '取消失败')
   } finally {
@@ -195,34 +205,21 @@ async function submitCancel() {
   }
 }
 
-/** 清本地登录态并回登录页。 */
-function logout() {
-  localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(NAME_KEY)
-  router.replace('/login')
-}
-
-onMounted(loadBookings)
+onMounted(loadBoard)
 </script>
 
 <template>
   <div class="board-page">
-    <header class="board-header">
-      <div>
-        <h1>预约后台管理系统</h1>
-      </div>
-      <div class="board-user">
-        <span>{{ adminName }}</span>
-        <button type="button" class="board-link" @click="logout">退出</button>
-      </div>
-    </header>
+    <p class="board-sub">
+      营业 {{ settings.startHour }}:00–{{ settings.endHour }}:00
+    </p>
 
     <!-- 列表加载失败时保留重试，不渲染空表造成「没有班次」的误解 -->
     <div v-if="loadError" class="board-status">
       <span>{{ loadError }}</span>
-      <button type="button" @click="loadBookings">重试</button>
+      <button type="button" @click="loadBoard">重试</button>
     </div>
-    <!-- 首屏等待 GET /api/bookings -->
+    <!-- 首屏等待设置和预约 -->
     <p v-else-if="loading" class="board-status">加载中…</p>
 
     <div v-else class="board-table-wrap">
@@ -263,14 +260,13 @@ onMounted(loadBookings)
       :weekday="createWeekday"
       :start-hour="createStartHour"
       :service-id="createServiceId"
-      :contact-name="createContactName"
+      :booker-name="bookerName"
       :remark="createRemark"
       :error="createError"
       :submitting="submitting"
       @close="closeCreate"
       @submit="submitCreate"
       @update:service-id="createServiceId = $event"
-      @update:contact-name="createContactName = $event"
       @update:remark="createRemark = $event"
     />
 
@@ -278,6 +274,7 @@ onMounted(loadBookings)
       v-if="detailOpen && detailBooking"
       :booking="detailBooking"
       :cancelling="cancelling"
+      :can-cancel="canCancelDetail()"
       @close="closeDetail"
       @cancel="submitCancel"
     />
@@ -285,44 +282,25 @@ onMounted(loadBookings)
 </template>
 
 <style scoped>
-/* 看板页头与表格主区域 */
+/* 看板表格主区域（顶栏在布局里） */
 .board-page {
-  padding: 20px 24px 40px;
+  min-width: 0;
 }
 
-.board-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-}
-
-.board-header h1 {
-  margin: 0;
-  font-size: 22px;
-}
-
-.board-user {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.board-link,
-.board-status button {
-  cursor: pointer;
-}
-
-.board-link {
-  border: 0;
-  background: none;
-  color: #1f4e79;
+.board-sub {
+  margin: 0 0 12px;
+  color: #616e7c;
+  font-size: 13px;
 }
 
 .board-status {
   display: flex;
   gap: 12px;
   align-items: center;
+}
+
+.board-status button {
+  cursor: pointer;
 }
 
 .board-table-wrap {
