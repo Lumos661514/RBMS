@@ -6,6 +6,9 @@ import AppLayout from '@/views/AppLayout.vue'
 import ScheduleBoard from '@/views/ScheduleBoard.vue'
 import UserManage from '@/views/UserManage.vue'
 import SystemSettings from '@/views/SystemSettings.vue'
+import ServiceIntro from '@/views/ServiceIntro.vue'
+import ServiceManage from '@/views/ServiceManage.vue'
+import EmployeeManage from '@/views/EmployeeManage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -23,6 +26,23 @@ const router = createRouter({
         { path: '', redirect: '/board' },
         { path: 'board', component: ScheduleBoard },
         { path: 'users', component: UserManage },
+        { path: 'services', component: ServiceIntro },
+        {
+          path: 'service-manage',
+          component: ServiceManage,
+          meta: {
+            /** 项目管理仅管理员 */
+            roles: ['admin'],
+          },
+        },
+        {
+          path: 'employees',
+          component: EmployeeManage,
+          meta: {
+            /** 员工管理仅管理员 */
+            roles: ['admin'],
+          },
+        },
         {
           path: 'settings',
           component: SystemSettings,

@@ -1,17 +1,24 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { getSettings, updateSettings } from '@/api/settings'
-import { WEEKDAY_LABELS } from '@/config/schedule'
-
-/** 勾选营业日时按周一到周日排列 */
-const WEEK_OPTIONS = [1, 2, 3, 4, 5, 6, 0]
+import {
+  DAY_COUNT_DEFAULT,
+  DAY_COUNT_MIN,
+  SLOT_MINUTES_DEFAULT,
+  SLOT_MINUTES_MIN,
+  SLOT_MINUTES_STEP,
+} from '@/config/schedule'
 
 /** 营业开始整点 */
 const startHour = ref(9)
 /** 营业结束整点（不含） */
 const endHour = ref(18)
-/** 营业的星期 0–6 */
-const weekDays = ref([1, 2, 3, 4, 5, 6])
+/** 看板从今天起展示的列数，最少 7 */
+const dayCount = ref(DAY_COUNT_DEFAULT)
+/** 每格时间段（分钟），最低 30，且为 30 的倍数 */
+const slotMinutes = ref(SLOT_MINUTES_DEFAULT)
+/** 设置页可选的时间段档位 */
+const SLOT_OPTIONS = [30, 60, 90, 120]
 const loading = ref(false)
 const saving = ref(false)
 const errorText = ref('')
@@ -24,7 +31,8 @@ async function loadSettings() {
     const data = await getSettings()
     startHour.value = data.startHour
     endHour.value = data.endHour
-    weekDays.value = [...data.weekDays]
+    dayCount.value = data.dayCount ?? DAY_COUNT_DEFAULT
+    slotMinutes.value = data.slotMinutes ?? SLOT_MINUTES_DEFAULT
   } catch (error) {
     errorText.value = error.message || '加载失败'
   } finally {
@@ -33,20 +41,7 @@ async function loadSettings() {
 }
 
 /**
- * 勾选或取消某个营业日。
- * @param {number} day
- * @param {boolean} checked
- */
-function toggleDay(day, checked) {
-  if (checked) {
-    if (!weekDays.value.includes(day)) weekDays.value = weekDays.value.concat(day)
-    return
-  }
-  weekDays.value = weekDays.value.filter((item) => item !== day)
-}
-
-/**
- * 保存营业时段；看板下次加载会按新设置画表。
+ * 保存营业时段、看板列数与时间段；看板下次加载会按新设置画表。
  */
 async function onSave() {
   errorText.value = ''
@@ -55,11 +50,13 @@ async function onSave() {
     const data = await updateSettings({
       startHour: Number(startHour.value),
       endHour: Number(endHour.value),
-      weekDays: weekDays.value,
+      dayCount: Number(dayCount.value),
+      slotMinutes: Number(slotMinutes.value),
     })
     startHour.value = data.startHour
     endHour.value = data.endHour
-    weekDays.value = [...data.weekDays]
+    dayCount.value = data.dayCount
+    slotMinutes.value = data.slotMinutes
   } catch (error) {
     errorText.value = error.message || '保存失败'
   } finally {
@@ -86,24 +83,25 @@ onMounted(loadSettings)
         结束整点（不含该点）
         <input v-model.number="endHour" type="number" min="1" max="24" />
       </label>
-      <fieldset class="system-settings-days">
-        <legend>营业日</legend>
-        <label v-for="day in WEEK_OPTIONS" :key="day" class="system-settings-day">
-          <input
-            type="checkbox"
-            :checked="weekDays.includes(day)"
-            @change="toggleDay(day, $event.target.checked)"
-          />
-          {{ WEEKDAY_LABELS[day] }}
-        </label>
-      </fieldset>
+      <label>
+        时间段（每格分钟数，最低 {{ SLOT_MINUTES_MIN }}，步进 {{ SLOT_MINUTES_STEP }}）
+        <select v-model.number="slotMinutes">
+          <option v-for="item in SLOT_OPTIONS" :key="item" :value="item">
+            {{ item }} 分钟
+          </option>
+        </select>
+      </label>
+      <label>
+        看板列数（从今日起，最少 {{ DAY_COUNT_MIN }}）
+        <input v-model.number="dayCount" type="number" :min="DAY_COUNT_MIN" step="1" />
+      </label>
       <button type="submit" :disabled="saving">{{ saving ? '保存中…' : '保存' }}</button>
     </form>
   </div>
 </template>
 
 <style scoped>
-/* 系统设置：营业时段与星期 */
+/* 系统设置：营业时段、时间段与看板列数 */
 .system-settings-title {
   margin: 0 0 8px;
   font-size: 20px;
@@ -137,26 +135,13 @@ onMounted(loadSettings)
   color: #52606d;
 }
 
-.system-settings-form input[type='number'] {
-  max-width: 120px;
+.system-settings-form input[type='number'],
+.system-settings-form select {
+  max-width: 160px;
   padding: 8px;
   border: 1px solid #cbd2d9;
   border-radius: 4px;
-}
-
-.system-settings-days {
-  border: 1px solid #e4e7eb;
-  border-radius: 4px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  padding: 8px 12px;
-}
-
-.system-settings-day {
-  flex-direction: row !important;
-  align-items: center;
-  gap: 6px !important;
+  font: inherit;
 }
 
 .system-settings-form button {

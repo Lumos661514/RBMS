@@ -1,16 +1,16 @@
 import request from './request.js'
 
 /**
- * 拉本周预约列表，用来给看板涂占用格。
- * @param {string} weekStart 本周一 YYYY-MM-DD
+ * 拉预约列表，用来给看板涂占用格。
+ * @param {string} [_rangeStart] 保留参数位，Mock 目前返回全部
  */
-export function getBookings(weekStart) {
-  return request.get('/bookings', { params: { weekStart } })
+export function getBookings(_rangeStart) {
+  return request.get('/bookings', { params: { rangeStart: _rangeStart } })
 }
 
 /**
- * 创建预约；服务耗时与当前登录用户由 Mock 写入。
- * @param {{ weekday: number, startHour: number, serviceId: string, remark?: string }} payload
+ * 创建预约；须指定服务与员工。管理员须传 userId 代约普通用户。
+ * @param {{ date: string, startHour: number, serviceId: string, employeeId: string, remark?: string, userId?: string }} payload
  */
 export function createBooking(payload) {
   return request.post('/bookings', payload)

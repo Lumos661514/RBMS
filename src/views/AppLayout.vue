@@ -44,6 +44,30 @@ function logout() {
         >
           用户管理
         </router-link>
+        <router-link
+          class="app-layout-link"
+          :class="{ 'is-active': isActive('/services') }"
+          to="/services"
+        >
+          项目介绍
+        </router-link>
+        <!-- 仅管理员可改服务目录 -->
+        <router-link
+          v-if="role === 'admin'"
+          class="app-layout-link"
+          :class="{ 'is-active': isActive('/service-manage') }"
+          to="/service-manage"
+        >
+          项目管理
+        </router-link>
+        <router-link
+          v-if="role === 'admin'"
+          class="app-layout-link"
+          :class="{ 'is-active': isActive('/employees') }"
+          to="/employees"
+        >
+          员工管理
+        </router-link>
         <!-- 仅管理员看到系统设置 -->
         <router-link
           v-if="role === 'admin'"
