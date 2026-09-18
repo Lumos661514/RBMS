@@ -34,13 +34,14 @@ function clearAuthAndGoLogin() {
 }
 
 const service = axios.create({
-  baseURL: '/api',
+  /** 开发走 Vite 代理；上线可设 VITE_API_BASE 指向 Express */
+  baseURL: import.meta.env.VITE_API_BASE || '/api',
   timeout: 8000,
 })
 
 service.interceptors.request.use((config) => {
   const token = localStorage.getItem(TOKEN_KEY)
-  // 登录后所有业务请求带上 token，Mock 用它判断是否已登录
+  // 登录后所有业务请求带上 token，后端用它判断是否已登录
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -50,7 +51,7 @@ service.interceptors.request.use((config) => {
 service.interceptors.response.use(
   (response) => {
     const payload = response.data
-    // Mock 用业务码 401 表示登录失效，清 token 并回登录页
+    // 业务码 401 表示登录失效，清 token 并回登录页
     if (payload.code === 401) {
       clearAuthAndGoLogin()
       return Promise.reject(new Error(payload.message || '未登录'))

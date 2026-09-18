@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { createService, getServices, updateService } from '@/api/services'
+import { createService, deleteService, getServices, updateService } from '@/api/services'
 
 /** 服务列表 */
 const services = ref([])
@@ -93,6 +93,24 @@ async function onSubmit() {
   }
 }
 
+/**
+ * 删除当前正在编辑的项目；已有预约记录仍保留当时名称。
+ */
+async function onDelete() {
+  if (!editingId.value) return
+  actionError.value = ''
+  saving.value = true
+  try {
+    await deleteService(editingId.value)
+    await loadServices()
+    startCreate()
+  } catch (error) {
+    actionError.value = error.message || '删除失败'
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(() => {
   loadServices()
   startCreate()
@@ -102,7 +120,7 @@ onMounted(() => {
 <template>
   <div class="service-manage">
     <h2 class="service-manage-title">项目管理</h2>
-    <p class="service-manage-hint">可新增服务，或修改价格、时长与简介；变更会同步到项目介绍与预约下拉。</p>
+    <p class="service-manage-hint">可新增、修改或删除服务；变更会同步到项目介绍与预约下拉。已产生的预约记录仍保留当时的项目名称。</p>
 
     <p v-if="loading">加载中…</p>
     <p v-else-if="loadError" class="service-manage-error">{{ loadError }}</p>
@@ -148,6 +166,15 @@ onMounted(() => {
           </button>
           <button v-if="editingId" type="button" class="service-manage-ghost" @click="startCreate">
             改为新增
+          </button>
+          <button
+            v-if="editingId"
+            type="button"
+            class="service-manage-danger"
+            :disabled="saving"
+            @click="onDelete"
+          >
+            删除项目
           </button>
         </div>
       </form>
@@ -266,5 +293,9 @@ onMounted(() => {
 .service-manage-ghost {
   background: #e4e7eb !important;
   color: #1f2933 !important;
+}
+
+.service-manage-danger {
+  background: #c81e1e !important;
 }
 </style>

@@ -23,3 +23,11 @@ export function createService(payload) {
 export function updateService(id, payload) {
   return request.put(`/services/${id}`, payload)
 }
+
+/**
+ * 删除服务；仅管理员。已有预约记录保留名称快照。
+ * @param {string} id
+ */
+export function deleteService(id) {
+  return request.delete(`/services/${id}`)
+}

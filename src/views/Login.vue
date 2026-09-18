@@ -7,10 +7,10 @@ import { saveSession } from '@/api/request'
 const route = useRoute()
 const router = useRouter()
 
-/** 演示账号预填，与内置管理员一致 */
-const phone = ref('13800000000')
-/** 演示密码预填 */
-const password = ref('123456')
+/** 登录输入，不预填账号密码 */
+const phone = ref('')
+/** 登录密码 */
+const password = ref('')
 /** 校验或接口失败时展示 */
 const errorText = ref('')
 /** 登录请求进行中 */
@@ -50,11 +50,11 @@ function onForgot() {
       <h1>预约后台管理系统</h1>
       <label>
         手机号
-        <input v-model="phone" type="text" autocomplete="username" />
+          <input v-model="phone" type="text" autocomplete="username" placeholder="请输入手机号" />
       </label>
       <label>
         密码
-        <input v-model="password" type="password" autocomplete="current-password" />
+          <input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
       </label>
       <div class="login-extra">
         <RouterLink class="login-extra-link" to="/register">注册账号</RouterLink>

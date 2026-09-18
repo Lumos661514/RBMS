@@ -1,0 +1,19 @@
+# 本地 MySQL：与简历中的持久化层一致，默认库名 booking。
+services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - '3306:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: 123456
+      MYSQL_DATABASE: booking
+    volumes:
+      - booking_mysql:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-uroot', '-p123456']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  booking_mysql:
