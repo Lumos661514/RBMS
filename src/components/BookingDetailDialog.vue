@@ -52,113 +52,60 @@ function canCancel(booking) {
 </script>
 
 <template>
-  <div class="booking-detail-dialog" @click.self="$emit('close')">
-    <div class="booking-detail-dialog-panel" role="dialog">
-      <h2>预约详情</h2>
-      <p class="booking-detail-dialog-meta">
-        {{ bookingDateLabel(bookings[0]?.date) }}
-        · 共 {{ bookings.length }} 条
-      </p>
+  <el-dialog
+    title="预约详情"
+    model-value
+    width="420px"
+    :close-on-click-modal="true"
+    @close="$emit('close')"
+  >
+    <p class="booking-detail-dialog-meta">
+      {{ bookingDateLabel(bookings[0]?.date) }}
+      · 共 {{ bookings.length }} 条
+    </p>
 
-      <!-- 每条独立一块，取消按钮跟在条目内，避免被挤出视口 -->
-      <ul class="booking-detail-dialog-list">
-        <li v-for="item in bookings" :key="item.id" class="booking-detail-dialog-item">
-          <p>服务：{{ item.serviceName }}</p>
-          <p v-if="item.employeeName">员工：{{ item.employeeName }}</p>
-          <p>预约人：{{ item.contactName }}</p>
-          <!-- 管理员代约场景会写入手机号，便于核对用户 -->
-          <p v-if="role === 'admin' && item.contactPhone">手机：{{ item.contactPhone }}</p>
-          <p>时间：{{ bookingEndLabel(item) }}</p>
-          <p v-if="item.remark">备注：{{ item.remark }}</p>
-          <div class="booking-detail-dialog-item-actions">
-            <button
-              v-if="canCancel(item)"
-              type="button"
-              class="booking-detail-dialog-danger"
-              :disabled="cancellingId === item.id"
-              @click="$emit('cancel', item.id)"
-            >
-              {{ cancellingId === item.id ? '取消中…' : '取消预约' }}
-            </button>
-          </div>
-        </li>
-      </ul>
-
-      <div class="booking-detail-dialog-actions">
-        <button type="button" class="booking-detail-dialog-ghost" @click="$emit('close')">关闭</button>
-        <!-- 未满时可继续约：管理员代约 / 用户自约 -->
-        <button
-          v-if="canContinue"
-          type="button"
-          class="booking-detail-dialog-primary"
-          @click="$emit('continue')"
+    <!-- 每条独立一块，取消按钮跟在条目内 -->
+    <el-card v-for="item in bookings" :key="item.id" class="booking-detail-dialog-item" shadow="never">
+      <p>服务：{{ item.serviceName }}</p>
+      <p v-if="item.employeeName">员工：{{ item.employeeName }}</p>
+      <p>预约人：{{ item.contactName }}</p>
+      <!-- 管理员代约场景会写入手机号，便于核对用户 -->
+      <p v-if="role === 'admin' && item.contactPhone">手机：{{ item.contactPhone }}</p>
+      <p>时间：{{ bookingEndLabel(item) }}</p>
+      <p v-if="item.remark">备注：{{ item.remark }}</p>
+      <div v-if="canCancel(item)" class="booking-detail-dialog-item-actions">
+        <el-button
+          type="danger"
+          size="small"
+          :loading="cancellingId === item.id"
+          @click="$emit('cancel', item.id)"
         >
-          继续预约
-        </button>
+          取消预约
+        </el-button>
       </div>
-    </div>
-  </div>
+    </el-card>
+
+    <template #footer>
+      <el-button @click="$emit('close')">关闭</el-button>
+      <!-- 未满时可继续约：管理员代约 / 用户自约 -->
+      <el-button v-if="canContinue" type="primary" @click="$emit('continue')">继续预约</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
-/* 遮罩：点空白关闭 */
-.booking-detail-dialog {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  box-sizing: border-box;
-}
-
-.booking-detail-dialog-panel {
-  width: 400px;
-  max-width: 100%;
-  max-height: calc(100vh - 32px);
-  overflow-y: auto;
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  box-sizing: border-box;
-}
-
-.booking-detail-dialog-panel h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
 .booking-detail-dialog-meta {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 13px;
   color: #616e7c;
 }
 
-.booking-detail-dialog-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
 .booking-detail-dialog-item {
-  margin: 0;
-  padding: 12px;
-  border: 1px solid #e4e7eb;
-  border-radius: 6px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  margin-bottom: 10px;
 }
 
 .booking-detail-dialog-item p {
-  margin: 0;
+  margin: 0 0 4px;
   font-size: 13px;
 }
 
@@ -166,36 +113,5 @@ function canCancel(booking) {
   margin-top: 8px;
   display: flex;
   justify-content: flex-end;
-}
-
-.booking-detail-dialog-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 4px;
-}
-
-.booking-detail-dialog-actions button,
-.booking-detail-dialog-item-actions button {
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.booking-detail-dialog-ghost {
-  background: #e4e7eb;
-  color: #1f2933;
-}
-
-.booking-detail-dialog-primary {
-  background: #1f4e79;
-  color: #fff;
-}
-
-.booking-detail-dialog-danger {
-  background: #c81e1e;
-  color: #fff;
 }
 </style>

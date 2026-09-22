@@ -1,8 +1,10 @@
 <script setup>
 import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { login } from '@/api/auth'
 import { saveSession } from '@/api/request'
+import { homePath, isPathForRole } from '@/utils/portal'
 
 const route = useRoute()
 const router = useRouter()
@@ -17,7 +19,7 @@ const errorText = ref('')
 const submitting = ref(false)
 
 /**
- * 提交登录；成功后写入 token，默认进预约看板。
+ * 提交登录；成功后写入 token，管理员进后台，顾客进预约端。
  */
 async function onSubmit() {
   errorText.value = ''
@@ -29,8 +31,10 @@ async function onSubmit() {
   try {
     const data = await login({ phone: phone.value.trim(), password: password.value })
     saveSession(data)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/board'
-    await router.replace(redirect)
+    const fallback = homePath(data.role)
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : ''
+    const next = redirect && isPathForRole(redirect, data.role) ? redirect : fallback
+    await router.replace(next)
   } catch (error) {
     errorText.value = error.message || '登录失败'
   } finally {
@@ -40,37 +44,45 @@ async function onSubmit() {
 
 /** 忘记密码第一版不做流程，只提示。 */
 function onForgot() {
-  window.alert('忘记密码功能暂未开放')
+  ElMessage.info('忘记密码功能暂未开放')
 }
 </script>
 
 <template>
   <div class="login-page">
-    <form class="login-card" @submit.prevent="onSubmit">
-      <h1>预约后台管理系统</h1>
-      <label>
-        手机号
-          <input v-model="phone" type="text" autocomplete="username" placeholder="请输入手机号" />
-      </label>
-      <label>
-        密码
-          <input v-model="password" type="password" autocomplete="current-password" placeholder="请输入密码" />
-      </label>
-      <div class="login-extra">
-        <RouterLink class="login-extra-link" to="/register">注册账号</RouterLink>
-        <button type="button" class="login-extra-link" @click="onForgot">忘记密码</button>
-      </div>
-      <!-- 登录失败或校验失败时展示，成功则跳走 -->
-      <p v-if="errorText" class="login-error">{{ errorText }}</p>
-      <button type="submit" class="login-submit" :disabled="submitting">
-        {{ submitting ? '登录中…' : '登录' }}
-      </button>
-    </form>
+    <el-card class="login-card" shadow="never">
+      <h1>预约系统</h1>
+      <p class="login-lead">顾客预约请注册或登录；管理员登录后进入后台。</p>
+      <!-- 标签放在输入框上方，避免「手机号」「密码」字数不同导致框宽错位 -->
+      <el-form label-position="top" @submit.prevent="onSubmit">
+        <el-form-item label="手机号">
+          <el-input v-model="phone" autocomplete="username" placeholder="请输入手机号" />
+        </el-form-item>
+        <el-form-item label="密码">
+          <el-input
+            v-model="password"
+            type="password"
+            show-password
+            autocomplete="current-password"
+            placeholder="请输入密码"
+          />
+        </el-form-item>
+        <div class="login-extra">
+          <RouterLink class="login-extra-link" to="/register">注册账号</RouterLink>
+          <el-button link type="primary" @click="onForgot">忘记密码</el-button>
+        </div>
+        <!-- 登录失败或校验失败时展示，成功则跳走 -->
+        <el-alert v-if="errorText" :title="errorText" type="error" :closable="false" show-icon />
+        <el-button class="login-submit" type="primary" native-type="submit" :loading="submitting">
+          登录
+        </el-button>
+      </el-form>
+    </el-card>
   </div>
 </template>
 
 <style scoped>
-/* 登录页：居中卡片，与看板宽表区分 */
+/* 登录页：居中卡片 */
 .login-page {
   min-height: 100vh;
   display: flex;
@@ -80,14 +92,7 @@ function onForgot() {
 }
 
 .login-card {
-  width: 360px;
-  padding: 28px 24px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  width: 380px;
 }
 
 .login-card h1 {
@@ -96,53 +101,28 @@ function onForgot() {
   text-align: center;
 }
 
-.login-card label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.login-lead {
+  margin: 0 0 16px;
+  text-align: center;
   font-size: 13px;
-  color: #52606d;
-}
-
-.login-card input {
-  padding: 8px 10px;
-  border: 1px solid #cbd2d9;
-  border-radius: 4px;
+  color: #616e7c;
 }
 
 .login-extra {
   display: flex;
   justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
 }
 
 .login-extra-link {
-  border: 0;
-  padding: 0;
-  background: none;
   color: #1f4e79;
   font-size: 13px;
   text-decoration: none;
-  cursor: pointer;
-}
-
-.login-error {
-  margin: 0;
-  color: #c81e1e;
-  font-size: 13px;
 }
 
 .login-submit {
-  margin-top: 4px;
-  padding: 10px;
-  border: 0;
-  border-radius: 4px;
-  background: #1f4e79;
-  color: #fff;
-  cursor: pointer;
-}
-
-.login-submit:disabled {
-  opacity: 0.65;
-  cursor: not-allowed;
+  width: 100%;
+  margin-top: 8px;
 }
 </style>

@@ -4,12 +4,24 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import cors from 'cors'
 import express from 'express'
+import {
+  hashPassword,
+  isHashedPassword,
+  signToken,
+  userIdFromToken,
+  verifyPassword,
+} from './auth.js'
 import { pool, waitForDb } from './db.js'
 import { initDatabase } from './init.js'
 import {
   canCreateBooking,
   canUserCancelBooking,
+  durationFitsSlot,
   formatBookingDateDisplay,
+  formatClockFromMinutes,
+  formatISODate,
+  leaveOverlapsBooking,
+  leaveRangesOverlap,
   normalizeDayCount,
   normalizeSlotMinutes,
   settleExpiredBookings,
@@ -29,23 +41,19 @@ function unauthorized() {
   return { code: 401, message: '未登录', data: null }
 }
 
-function tokenForUser(userId) {
-  return `tok-${userId}`
-}
-
 function publicUser(user) {
   return { id: user.id, phone: user.phone, name: user.name, role: user.role }
 }
 
 /**
- * 从 Bearer tok-{userId} 解析当前用户。
+ * 从 Bearer JWT 解析当前用户。
  * @param {import('express').Request} req
  */
 async function currentUser(req) {
   const raw = req.headers.authorization || ''
   const token = String(raw).replace(/^Bearer\s+/i, '').trim()
-  if (!token.startsWith('tok-')) return null
-  const userId = token.slice(4)
+  const userId = userIdFromToken(token)
+  if (!userId) return null
   const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [userId])
   return rows[0] ? mapUser(rows[0]) : null
 }
@@ -135,6 +143,24 @@ async function findService(id, conn = pool) {
 }
 
 /**
+ * @param {object} row
+ */
+function mapLeave(row) {
+  const raw = row.leave_date
+  const endRaw = row.end_date || row.leave_date
+  const date = raw instanceof Date ? formatISODate(raw) : String(raw).slice(0, 10)
+  const endDate = endRaw instanceof Date ? formatISODate(endRaw) : String(endRaw).slice(0, 10)
+  return {
+    id: row.id,
+    employeeId: row.employee_id,
+    date,
+    endDate,
+    startMinutes: Number(row.start_minutes),
+    endMinutes: Number(row.end_minutes),
+  }
+}
+
+/**
  * @param {string} id
  * @param {import('mysql2/promise').PoolConnection} [conn]
  */
@@ -145,10 +171,12 @@ async function findEmployee(id, conn = pool) {
     'SELECT service_id FROM employee_services WHERE employee_id = ?',
     [id],
   )
+  const [leaveRows] = await conn.query('SELECT * FROM employee_leaves WHERE employee_id = ?', [id])
   return {
     id: rows[0].id,
     name: rows[0].name,
     serviceIds: links.map((item) => item.service_id),
+    leaves: leaveRows.map(mapLeave),
   }
 }
 
@@ -158,23 +186,31 @@ async function findEmployee(id, conn = pool) {
 async function listEmployees(conn = pool) {
   const [employees] = await conn.query('SELECT * FROM employees')
   const [links] = await conn.query('SELECT employee_id, service_id FROM employee_services')
+  const [leaveRows] = await conn.query('SELECT * FROM employee_leaves')
   const byEmp = new Map()
   for (const item of links) {
     if (!byEmp.has(item.employee_id)) byEmp.set(item.employee_id, [])
     byEmp.get(item.employee_id).push(item.service_id)
   }
+  const leavesByEmp = new Map()
+  for (const item of leaveRows) {
+    if (!leavesByEmp.has(item.employee_id)) leavesByEmp.set(item.employee_id, [])
+    leavesByEmp.get(item.employee_id).push(mapLeave(item))
+  }
   return employees.map((item) => ({
     id: item.id,
     name: item.name,
     serviceIds: byEmp.get(item.id) || [],
+    leaves: leavesByEmp.get(item.id) || [],
   }))
 }
 
 /**
  * @param {object} payload
  * @param {object[]} services
+ * @param {{ open: number, close: number }} windowMinutes 营业时间，分钟
  */
-function parseEmployeePayload(payload, services) {
+function parseEmployeePayload(payload, services, windowMinutes) {
   const name = String(payload.name || '').trim()
   const serviceIds = Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String) : []
   if (!name) return { ok: false, message: '请填写员工姓名' }
@@ -183,13 +219,95 @@ function parseEmployeePayload(payload, services) {
   if (serviceIds.some((id) => !validIds.has(id))) {
     return { ok: false, message: '所选项目无效' }
   }
-  return { ok: true, data: { name, serviceIds } }
+  const parsedLeaves = parseEmployeeLeaves(payload.leaves, windowMinutes)
+  if (!parsedLeaves.ok) return parsedLeaves
+  return { ok: true, data: { name, serviceIds, leaves: parsedLeaves.data } }
+}
+
+/**
+ * 校验请假时段：起止都在营业时间内，结束必须晚于开始，时段之间不重叠。
+ * @param {unknown} raw
+ * @param {{ open: number, close: number }} windowMinutes
+ */
+function parseEmployeeLeaves(raw, windowMinutes) {
+  if (raw == null) return { ok: true, data: [] }
+  if (!Array.isArray(raw)) return { ok: false, message: '请假安排格式无效' }
+  const open = windowMinutes.open
+  const close = windowMinutes.close
+  const leaves = []
+  for (const item of raw) {
+    const date = String(item?.date || '').trim()
+    const endDate = String(item?.endDate || item?.date || '').trim()
+    const startMinutes = Number(item?.startMinutes)
+    const endMinutes = Number(item?.endMinutes)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+      return { ok: false, message: '请假日期无效' }
+    }
+    if (!Number.isInteger(startMinutes) || !Number.isInteger(endMinutes)) {
+      return { ok: false, message: '请假时间无效' }
+    }
+    const endsAfter = endDate > date || (endDate === date && endMinutes > startMinutes)
+    if (!endsAfter) return { ok: false, message: '结束时间必须晚于开始时间' }
+    if (startMinutes < open || startMinutes >= close || endMinutes < open || endMinutes > close) {
+      return {
+        ok: false,
+        message: `请假须在营业时间 ${formatClockFromMinutes(open)}–${formatClockFromMinutes(close)} 内`,
+      }
+    }
+    const next = { date, endDate, startMinutes, endMinutes }
+    if (leaves.some((prev) => leaveRangesOverlap(prev, next))) {
+      return { ok: false, message: '请假时段不能重叠' }
+    }
+    leaves.push({
+      id: String(item?.id || '').trim() || `el-${Date.now()}-${leaves.length}`,
+      ...next,
+    })
+  }
+  return { ok: true, data: leaves }
+}
+
+/**
+ * 覆盖写入某员工的请假时段。
+ * @param {import('mysql2/promise').PoolConnection} conn
+ * @param {string} employeeId
+ * @param {Array<{ id: string, date: string, endDate: string, startMinutes: number, endMinutes: number }>} leaves
+ */
+async function replaceEmployeeLeaves(conn, employeeId, leaves) {
+  await conn.query('DELETE FROM employee_leaves WHERE employee_id = ?', [employeeId])
+  for (const item of leaves) {
+    await conn.query(
+      'INSERT INTO employee_leaves (id, employee_id, leave_date, end_date, start_minutes, end_minutes) VALUES (?, ?, ?, ?, ?, ?)',
+      [item.id, employeeId, item.date, item.endDate, item.startMinutes, item.endMinutes],
+    )
+  }
+}
+
+/**
+ * 当前营业起止，用来限制请假时段。
+ */
+async function currentBusinessMinutes() {
+  const [rows] = await pool.query('SELECT start_hour, end_hour FROM settings WHERE id = 1')
+  const start = Number(rows[0]?.start_hour)
+  const end = Number(rows[0]?.end_hour)
+  return {
+    open: (Number.isFinite(start) ? start : 9) * 60,
+    close: (Number.isFinite(end) ? end : 18) * 60,
+  }
+}
+
+/**
+ * 当前营业时间格，保存项目时用来校验时长。
+ */
+async function currentSlotMinutes() {
+  const [rows] = await pool.query('SELECT slot_minutes FROM settings WHERE id = 1')
+  return normalizeSlotMinutes(rows[0]?.slot_minutes)
 }
 
 /**
  * @param {object} payload
+ * @param {number} slotMinutes 当前时间格；时长须为其整数倍
  */
-function parseServicePayload(payload) {
+function parseServicePayload(payload, slotMinutes) {
   const name = String(payload.name || '').trim()
   const description = String(payload.description || '').trim()
   const price = Number(payload.price)
@@ -199,6 +317,8 @@ function parseServicePayload(payload) {
   if (!Number.isFinite(durationHours) || durationHours < 0.5 || Math.round(durationHours * 2) !== durationHours * 2) {
     return { ok: false, message: '服务时长须为至少 0.5 小时，且为 0.5 的倍数' }
   }
+  const fit = durationFitsSlot(durationHours, slotMinutes)
+  if (!fit.ok) return { ok: false, message: fit.message }
   if (!description) return { ok: false, message: '请填写简单介绍' }
   return { ok: true, data: { name, price, durationHours, description } }
 }
@@ -231,18 +351,21 @@ app.post('/api/login', async (req, res, next) => {
   try {
     const phone = String(req.body?.phone || '').trim()
     const password = String(req.body?.password || '')
-    const [rows] = await pool.query('SELECT * FROM users WHERE phone = ? AND password = ?', [
-      phone,
-      password,
-    ])
-    if (!rows[0]) {
+    const [rows] = await pool.query('SELECT * FROM users WHERE phone = ?', [phone])
+    const row = rows[0]
+    if (!row || !(await verifyPassword(password, row.password))) {
       res.json(fail('手机号或密码错误'))
       return
     }
-    const user = mapUser(rows[0])
+    // 旧明文命中后立刻改成哈希，避免继续明文存放
+    if (!isHashedPassword(row.password)) {
+      const hashed = await hashPassword(password)
+      await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, row.id])
+    }
+    const user = mapUser(row)
     res.json(
       ok({
-        token: tokenForUser(user.id),
+        token: signToken(user.id),
         name: user.name,
         role: user.role,
         userId: user.id,
@@ -268,9 +391,10 @@ app.post('/api/register', async (req, res, next) => {
       return
     }
     const id = `u-${Date.now()}`
+    const hashed = await hashPassword(password)
     await pool.query(
       'INSERT INTO users (id, phone, password, name, role, builtin) VALUES (?, ?, ?, ?, ?, 0)',
-      [id, phone, password, name, 'user'],
+      [id, phone, hashed, name, 'user'],
     )
     res.json(ok({ id }))
   } catch (error) {
@@ -329,10 +453,43 @@ app.put('/api/settings', requireAuth, async (req, res, next) => {
   }
 })
 
-app.get('/api/bookings', requireAuth, async (_req, res, next) => {
+app.get('/api/bookings', requireAuth, async (req, res, next) => {
   try {
     const list = await settleBookings()
-    res.json(ok({ list }))
+    // 管理员看全部；顾客只拿自己的单，别人的姓名手机不随列表出去
+    if (req.user.role === 'admin') {
+      res.json(ok({ list }))
+      return
+    }
+    res.json(ok({ list: list.filter((item) => item.userId === req.user.id) }))
+  } catch (error) {
+    next(error)
+  }
+})
+
+/**
+ * 进行中占用：只给员工与时段，不含预约人。顾客端算空位用。
+ */
+app.get('/api/occupancy', requireAuth, async (req, res, next) => {
+  try {
+    const list = await settleBookings()
+    const from = String(req.query.from || '').slice(0, 10)
+    const to = String(req.query.to || '').slice(0, 10)
+    const blocks = list
+      .filter((item) => item.status === 'active')
+      .map((item) => ({
+        employeeId: item.employeeId,
+        date:
+          item.date instanceof Date ? formatISODate(item.date) : String(item.date).slice(0, 10),
+        startHour: Number(item.startHour),
+        durationHours: Number(item.durationHours),
+      }))
+      .filter((item) => {
+        if (from && item.date < from) return false
+        if (to && item.date > to) return false
+        return true
+      })
+    res.json(ok({ list: blocks }))
   } catch (error) {
     next(error)
   }
@@ -403,6 +560,7 @@ app.post('/api/bookings', requireAuth, async (req, res, next) => {
       employee,
       service.id,
       targetUser.id,
+      employee.leaves,
     )
     if (!check.ok) {
       await conn.rollback()
@@ -503,7 +661,11 @@ app.post('/api/employees', requireAuth, async (req, res, next) => {
       return
     }
     const [serviceRows] = await pool.query('SELECT * FROM services')
-    const parsed = parseEmployeePayload(req.body || {}, serviceRows.map(mapService))
+    const parsed = parseEmployeePayload(
+      req.body || {},
+      serviceRows.map(mapService),
+      await currentBusinessMinutes(),
+    )
     if (!parsed.ok) {
       res.json(fail(parsed.message))
       return
@@ -519,6 +681,7 @@ app.post('/api/employees', requireAuth, async (req, res, next) => {
           serviceId,
         ])
       }
+      await replaceEmployeeLeaves(conn, created.id, created.leaves)
       await conn.commit()
     } catch (error) {
       await conn.rollback()
@@ -544,9 +707,21 @@ app.put('/api/employees/:id', requireAuth, async (req, res, next) => {
       return
     }
     const [serviceRows] = await pool.query('SELECT * FROM services')
-    const parsed = parseEmployeePayload(req.body || {}, serviceRows.map(mapService))
+    const parsed = parseEmployeePayload(
+      req.body || {},
+      serviceRows.map(mapService),
+      await currentBusinessMinutes(),
+    )
     if (!parsed.ok) {
       res.json(fail(parsed.message))
+      return
+    }
+    const bookings = await listBookings()
+    const blocked = parsed.data.leaves.some((leave) =>
+      leaveOverlapsBooking(leave, bookings, target.id),
+    )
+    if (blocked) {
+      res.json(fail('该时段已有预约，不能请假'))
       return
     }
     const conn = await pool.getConnection()
@@ -560,6 +735,7 @@ app.put('/api/employees/:id', requireAuth, async (req, res, next) => {
           serviceId,
         ])
       }
+      await replaceEmployeeLeaves(conn, target.id, parsed.data.leaves)
       await conn.commit()
     } catch (error) {
       await conn.rollback()
@@ -588,7 +764,7 @@ app.post('/api/services', requireAuth, async (req, res, next) => {
       res.json(fail('没有权限'))
       return
     }
-    const parsed = parseServicePayload(req.body || {})
+    const parsed = parseServicePayload(req.body || {}, await currentSlotMinutes())
     if (!parsed.ok) {
       res.json(fail(parsed.message))
       return
@@ -615,7 +791,7 @@ app.put('/api/services/:id', requireAuth, async (req, res, next) => {
       res.json(fail('服务不存在'))
       return
     }
-    const parsed = parseServicePayload(req.body || {})
+    const parsed = parseServicePayload(req.body || {}, await currentSlotMinutes())
     if (!parsed.ok) {
       res.json(fail(parsed.message))
       return
@@ -680,7 +856,8 @@ app.put('/api/users/:id/password', requireAuth, async (req, res, next) => {
       res.json(fail('请填写新密码'))
       return
     }
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [password, target.id])
+    const hashed = await hashPassword(password)
+    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, target.id])
     res.json(ok({ id: target.id }))
   } catch (error) {
     next(error)

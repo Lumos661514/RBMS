@@ -1,5 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { createService, deleteService, getServices, updateService } from '@/api/services'
 
 /** 服务列表 */
@@ -86,6 +87,7 @@ async function onSubmit() {
     }
     await loadServices()
     startCreate()
+    ElMessage.success('已保存')
   } catch (error) {
     actionError.value = error.message || '保存失败'
   } finally {
@@ -98,12 +100,21 @@ async function onSubmit() {
  */
 async function onDelete() {
   if (!editingId.value) return
+  try {
+    await ElMessageBox.confirm('删除后介绍页和下拉不再显示该项目，已有预约仍保留当时名称。', '删除项目', {
+      type: 'warning',
+    })
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    throw error
+  }
   actionError.value = ''
   saving.value = true
   try {
     await deleteService(editingId.value)
     await loadServices()
     startCreate()
+    ElMessage.success('已删除')
   } catch (error) {
     actionError.value = error.message || '删除失败'
   } finally {
@@ -120,64 +131,47 @@ onMounted(() => {
 <template>
   <div class="service-manage">
     <h2 class="service-manage-title">项目管理</h2>
-    <p class="service-manage-hint">可新增、修改或删除服务；变更会同步到项目介绍与预约下拉。已产生的预约记录仍保留当时的项目名称。</p>
+    <p class="service-manage-hint">可新增、修改或删除服务；时长须为当前时间格的整数倍。变更会同步到项目介绍与预约。已产生的预约记录仍保留当时的项目名称。</p>
 
-    <p v-if="loading">加载中…</p>
-    <p v-else-if="loadError" class="service-manage-error">{{ loadError }}</p>
+    <el-skeleton v-if="loading" :rows="4" animated />
+    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
 
     <div v-else class="service-manage-body">
-      <ul class="service-manage-list">
-        <li v-if="!services.length" class="service-manage-empty">暂无服务</li>
-        <li
-          v-for="item in services"
-          :key="item.id"
-          class="service-manage-item"
-          :class="{ 'is-active': editingId === item.id }"
-        >
-          <button type="button" @click="startEdit(item)">
+      <el-menu class="service-manage-list" :default-active="editingId">
+        <el-menu-item v-if="!services.length" index="empty" disabled>暂无服务</el-menu-item>
+        <el-menu-item v-for="item in services" :key="item.id" :index="item.id" @click="startEdit(item)">
+          <span>
             <strong>{{ item.name }}</strong>
-            <span>¥{{ item.price }} · {{ durationText(item.durationHours) }}</span>
-          </button>
-        </li>
-      </ul>
+            <em>¥{{ item.price }} · {{ durationText(item.durationHours) }}</em>
+          </span>
+        </el-menu-item>
+      </el-menu>
 
-      <form class="service-manage-form" @submit.prevent="onSubmit">
+      <el-card class="service-manage-form" shadow="never">
         <h3>{{ editingId ? '编辑服务' : '新增服务' }}</h3>
-        <label>
-          名称
-          <input v-model="formName" type="text" required />
-        </label>
-        <label>
-          价格（元）
-          <input v-model.number="formPrice" type="number" min="0" step="1" required />
-        </label>
-        <label>
-          时长（小时，最低 0.5，步进 0.5）
-          <input v-model.number="formDuration" type="number" min="0.5" step="0.5" required />
-        </label>
-        <label>
-          简单介绍
-          <textarea v-model="formDescription" rows="3" required />
-        </label>
-        <p v-if="actionError" class="service-manage-error">{{ actionError }}</p>
-        <div class="service-manage-actions">
-          <button type="submit" :disabled="saving">
-            {{ saving ? '保存中…' : editingId ? '保存修改' : '添加服务' }}
-          </button>
-          <button v-if="editingId" type="button" class="service-manage-ghost" @click="startCreate">
-            改为新增
-          </button>
-          <button
-            v-if="editingId"
-            type="button"
-            class="service-manage-danger"
-            :disabled="saving"
-            @click="onDelete"
-          >
-            删除项目
-          </button>
-        </div>
-      </form>
+        <el-form label-position="top" @submit.prevent="onSubmit">
+          <el-form-item label="名称">
+            <el-input v-model="formName" />
+          </el-form-item>
+          <el-form-item label="价格（元）">
+            <el-input-number v-model="formPrice" :min="0" :step="1" />
+          </el-form-item>
+          <el-form-item label="时长（小时，最低 0.5，步进 0.5）">
+            <el-input-number v-model="formDuration" :min="0.5" :step="0.5" />
+          </el-form-item>
+          <el-form-item label="简单介绍">
+            <el-input v-model="formDescription" type="textarea" :rows="3" />
+          </el-form-item>
+          <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
+          <div class="service-manage-actions">
+            <el-button type="primary" native-type="submit" :loading="saving">
+              {{ editingId ? '保存修改' : '添加服务' }}
+            </el-button>
+            <el-button v-if="editingId" @click="startCreate">改为新增</el-button>
+            <el-button v-if="editingId" type="danger" :loading="saving" @click="onDelete">删除项目</el-button>
+          </div>
+        </el-form>
+      </el-card>
     </div>
   </div>
 </template>
@@ -195,17 +189,6 @@ onMounted(() => {
   font-size: 13px;
 }
 
-.service-manage-error {
-  color: #c81e1e;
-  font-size: 13px;
-}
-
-.service-manage-empty {
-  color: #7b8794;
-  font-size: 13px;
-  padding: 10px 12px;
-}
-
 .service-manage-body {
   display: flex;
   gap: 24px;
@@ -213,89 +196,50 @@ onMounted(() => {
 }
 
 .service-manage-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
   width: 260px;
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
+  border-right: none;
 }
 
-.service-manage-item button {
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border: 0;
-  background: none;
-  cursor: pointer;
+/* 菜单项默认 56px 行高，会把名称顶出格子；改为随两行文案撑开 */
+.service-manage-list :deep(.el-menu-item) {
+  height: auto;
+  line-height: 1.4;
+  white-space: normal;
+  align-items: flex-start;
+  padding: 10px 16px;
+}
+
+.service-manage-list :deep(.el-menu-item span) {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
 }
 
-.service-manage-item button span {
+.service-manage-list strong {
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.service-manage-list em {
+  display: block;
+  font-style: normal;
   font-size: 12px;
+  line-height: 1.4;
   color: #7b8794;
-}
-
-.service-manage-item.is-active button {
-  background: #e6f2ff;
-  color: #1f4e79;
 }
 
 .service-manage-form {
   flex: 1;
   max-width: 420px;
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .service-manage-form h3 {
-  margin: 0;
+  margin: 0 0 12px;
   font-size: 15px;
-}
-
-.service-manage-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: #52606d;
-}
-
-.service-manage-form input,
-.service-manage-form textarea {
-  padding: 8px;
-  border: 1px solid #cbd2d9;
-  border-radius: 4px;
-  font: inherit;
 }
 
 .service-manage-actions {
   display: flex;
   gap: 8px;
-}
-
-.service-manage-actions button {
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 4px;
-  background: #1f4e79;
-  color: #fff;
-  cursor: pointer;
-}
-
-.service-manage-ghost {
-  background: #e4e7eb !important;
-  color: #1f2933 !important;
-}
-
-.service-manage-danger {
-  background: #c81e1e !important;
 }
 </style>

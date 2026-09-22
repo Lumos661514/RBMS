@@ -1,11 +1,19 @@
 import request from './request.js'
 
 /**
- * 拉预约列表，用来给看板涂占用格。
- * @param {string} [_rangeStart] 保留参数位，Mock 目前返回全部
+ * 拉预约列表。管理员为全部；顾客为自己的单。
+ * @param {string} [_rangeStart] 保留参数，便于以后按日起筛
  */
 export function getBookings(_rangeStart) {
   return request.get('/bookings', { params: { rangeStart: _rangeStart } })
+}
+
+/**
+ * 进行中占用格：只有员工和时段，没有预约人资料。
+ * @param {{ from?: string, to?: string }} [range]
+ */
+export function getOccupancy(range = {}) {
+  return request.get('/occupancy', { params: range })
 }
 
 /**

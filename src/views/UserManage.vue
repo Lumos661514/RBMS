@@ -1,9 +1,16 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteUser, getUserDetail, getUsers, updateUserPassword } from '@/api/user'
+import { cancelBooking } from '@/api/booking'
 import { ROLE_KEY, USER_ID_KEY } from '@/api/request'
 import { WEEKDAY_LABELS } from '@/config/schedule'
-import { formatBookingDateDisplay, formatClockFromHour } from '@/utils/schedule'
+import {
+  canUserCancelBooking,
+  formatBookingDateDisplay,
+  formatClockFromHour,
+  isSlotStartedOrPast,
+} from '@/utils/schedule'
 
 /** 管理员看列表；普通用户只看自己 */
 const isAdmin = localStorage.getItem(ROLE_KEY) === 'admin'
@@ -22,8 +29,10 @@ const loading = ref(false)
 const loadError = ref('')
 /** 改密/删除失败，不挡住已加载的资料 */
 const actionError = ref('')
-/** 改密或删除进行中 */
+/** 改密、删除或取消进行中 */
 const saving = ref(false)
+/** 正在取消的预约 id */
+const cancellingId = ref('')
 /** 管理员按手机号或姓名筛左侧列表 */
 const keyword = ref('')
 /** 左侧用户列表每页条数 */
@@ -66,6 +75,15 @@ function bookingLine(booking) {
 }
 
 /**
+ * 已到开始时刻则算消费记录；未到点的仍是进行中预约。
+ * @param {{ date?: string, startHour: number, status?: string }} booking
+ */
+function isSpendRecord(booking) {
+  if (booking.status === 'done') return true
+  return isSlotStartedOrPast(booking.date, booking.startHour)
+}
+
+/**
  * 姓名或手机号包含关键字即命中（忽略大小写与首尾空格）。
  * @param {{ name: string, phone: string }} user
  * @param {string} raw
@@ -99,23 +117,35 @@ const showPager = computed(() => filteredUsers.value.length > PAGE_SIZE)
 
 /** 预约记录总页数 */
 const bookingTotalPages = computed(() =>
-  Math.max(1, Math.ceil(detailBookings.value.length / BOOKING_PAGE_SIZE)),
+  Math.max(1, Math.ceil(listedRecords.value.length / BOOKING_PAGE_SIZE)),
 )
 
 /** 当前页预约记录切片 */
 const pagedBookings = computed(() => {
   const page = Math.min(Math.max(bookingPage.value, 1), bookingTotalPages.value)
   const start = (page - 1) * BOOKING_PAGE_SIZE
-  return detailBookings.value.slice(start, start + BOOKING_PAGE_SIZE)
+  return listedRecords.value.slice(start, start + BOOKING_PAGE_SIZE)
 })
 
 /** 预约超过一页才显示翻页 */
-const showBookingPager = computed(() => detailBookings.value.length > BOOKING_PAGE_SIZE)
+const showBookingPager = computed(() => listedRecords.value.length > BOOKING_PAGE_SIZE)
 
-/** 预约记录消费合计 */
-const totalSpend = computed(() =>
-  detailBookings.value.reduce((sum, item) => sum + bookingAmount(item), 0),
+/** 未到开始时刻的预约，顾客「我的预约」用 */
+const upcomingBookings = computed(() =>
+  detailBookings.value.filter((item) => !isSpendRecord(item)),
 )
+
+/** 到点后的消费记录 */
+const spendBookings = computed(() => detailBookings.value.filter((item) => isSpendRecord(item)))
+
+/** 管理员看全部预约；顾客分页只翻消费记录 */
+const listedRecords = computed(() => (isAdmin ? detailBookings.value : spendBookings.value))
+
+/** 顾客总计只算已到点的消费；管理员详情仍按该用户全部预约合计 */
+const totalSpend = computed(() => {
+  const source = isAdmin ? detailBookings.value : spendBookings.value
+  return source.reduce((sum, item) => sum + bookingAmount(item), 0)
+})
 
 const emptyAdminList = computed(() => isAdmin && !users.value.length)
 /** 有用户但当前关键字没命中 */
@@ -137,38 +167,6 @@ watch(totalPages, (pages) => {
 watch(bookingTotalPages, (pages) => {
   if (bookingPage.value > pages) bookingPage.value = pages
 })
-
-/**
- * 上一页；已在首页则不动。
- */
-function goPrevPage() {
-  if (currentPage.value <= 1) return
-  currentPage.value -= 1
-}
-
-/**
- * 下一页；已在末页则不动。
- */
-function goNextPage() {
-  if (currentPage.value >= totalPages.value) return
-  currentPage.value += 1
-}
-
-/**
- * 预约记录上一页。
- */
-function goPrevBookingPage() {
-  if (bookingPage.value <= 1) return
-  bookingPage.value -= 1
-}
-
-/**
- * 预约记录下一页。
- */
-function goNextBookingPage() {
-  if (bookingPage.value >= bookingTotalPages.value) return
-  bookingPage.value += 1
-}
 
 /**
  * 拉某个用户的资料和预约记录。
@@ -235,7 +233,7 @@ async function onSavePassword() {
   try {
     await updateUserPassword(detailUser.value.id, newPassword.value)
     newPassword.value = ''
-    window.alert('密码已更新')
+    ElMessage.success('密码已更新')
   } catch (error) {
     actionError.value = error.message || '修改失败'
   } finally {
@@ -248,6 +246,12 @@ async function onSavePassword() {
  */
 async function onDeleteUser() {
   if (!detailUser.value) return
+  try {
+    await ElMessageBox.confirm('删除账号后预约记录仍保留。', '删除账号', { type: 'warning' })
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    throw error
+  }
   saving.value = true
   actionError.value = ''
   try {
@@ -260,100 +264,159 @@ async function onDeleteUser() {
   }
 }
 
+/**
+ * 顾客取消一条未开始的预约。
+ * @param {{ id: string, date: string, startHour: number }} booking
+ */
+async function onCancelBooking(booking) {
+  if (!booking?.id) return
+  try {
+    await ElMessageBox.confirm('取消后该时段释放，可重新预约。', '取消预约', { type: 'warning' })
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    throw error
+  }
+  cancellingId.value = booking.id
+  actionError.value = ''
+  try {
+    await cancelBooking(booking.id)
+    await loadDetail(myId)
+    ElMessage.success('已取消')
+  } catch (error) {
+    actionError.value = error.message || '取消失败'
+  } finally {
+    cancellingId.value = ''
+  }
+}
+
 onMounted(loadPage)
 </script>
 
 <template>
   <div class="user-manage">
-    <h2 class="user-manage-title">用户管理</h2>
+    <h2 class="user-manage-title">{{ isAdmin ? '用户管理' : '个人信息' }}</h2>
     <!-- 加载或接口失败 -->
-    <p v-if="loading">加载中…</p>
-    <p v-else-if="loadError" class="user-manage-error">{{ loadError }}</p>
+    <el-skeleton v-if="loading" :rows="4" animated />
+    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
 
     <div v-else class="user-manage-body">
       <!-- 管理员：左侧普通用户列表 + 搜索 -->
       <div v-if="isAdmin" class="user-manage-aside">
-        <label class="user-manage-search">
-          搜索
-          <input
-            v-model="keyword"
-            type="search"
-            placeholder="手机号或姓名"
-            autocomplete="off"
-          />
-        </label>
-        <ul class="user-manage-list">
-          <li v-if="emptyAdminList" class="user-manage-empty">暂无普通用户</li>
-          <li v-else-if="emptySearchResult" class="user-manage-empty">无匹配用户</li>
-          <li
+        <el-input v-model="keyword" clearable placeholder="搜索手机号或姓名" />
+        <el-menu class="user-manage-list" :default-active="detailUser ? detailUser.id : ''">
+          <el-menu-item v-if="emptyAdminList" index="empty" disabled>暂无普通用户</el-menu-item>
+          <el-menu-item v-else-if="emptySearchResult" index="empty" disabled>无匹配用户</el-menu-item>
+          <el-menu-item
             v-for="item in pagedUsers"
             :key="item.id"
-            class="user-manage-item"
-            :class="{ 'is-active': detailUser && detailUser.id === item.id }"
+            :index="item.id"
+            @click="selectUser(item.id)"
           >
-            <button type="button" @click="selectUser(item.id)">
-              {{ item.name }} · {{ item.phone }}
-            </button>
-          </li>
-        </ul>
+            {{ item.name }} · {{ item.phone }}
+          </el-menu-item>
+        </el-menu>
         <!-- 超过一页才显示翻页 -->
-        <div v-if="showPager" class="user-manage-pager">
-          <button type="button" :disabled="currentPage <= 1" @click="goPrevPage">上一页</button>
-          <span>{{ Math.min(currentPage, totalPages) }} / {{ totalPages }}</span>
-          <button
-            type="button"
-            :disabled="currentPage >= totalPages"
-            @click="goNextPage"
-          >
-            下一页
-          </button>
-        </div>
+        <el-pagination
+          v-if="showPager"
+          v-model:current-page="currentPage"
+          :page-size="PAGE_SIZE"
+          :total="filteredUsers.length"
+          layout="prev, pager, next"
+          small
+        />
       </div>
 
-      <section v-if="detailUser" class="user-manage-detail">
+      <el-card v-if="detailUser" class="user-manage-detail" shadow="never">
         <p>姓名：{{ detailUser.name }}</p>
         <p>手机号：{{ detailUser.phone }}</p>
-        <p>总计消费：¥{{ totalSpend }}</p>
-        <h3>预约记录</h3>
-        <!-- 没有预约时给空态 -->
-        <p v-if="!detailBookings.length" class="user-manage-empty">暂无预约</p>
-        <template v-else>
-          <ul class="user-manage-bookings">
-            <li v-for="item in pagedBookings" :key="item.id">{{ bookingLine(item) }}</li>
-          </ul>
-          <div v-if="showBookingPager" class="user-manage-pager">
-            <button type="button" :disabled="bookingPage <= 1" @click="goPrevBookingPage">
-              上一页
-            </button>
-            <span>{{ Math.min(bookingPage, bookingTotalPages) }} / {{ bookingTotalPages }}</span>
-            <button
-              type="button"
-              :disabled="bookingPage >= bookingTotalPages"
-              @click="goNextBookingPage"
-            >
-              下一页
-            </button>
-          </div>
+        <!-- 管理员仍看该用户全部预约合计；顾客总计只来自到点后的消费记录 -->
+        <p v-if="isAdmin">总计消费：¥{{ totalSpend }}</p>
+        <template v-if="isAdmin">
+          <h3>预约记录</h3>
+          <!-- 没有预约时给空态 -->
+          <el-empty v-if="!detailBookings.length" description="暂无预约" :image-size="64" />
+          <template v-else>
+            <ul class="user-manage-bookings">
+              <li v-for="item in pagedBookings" :key="item.id">{{ bookingLine(item) }}</li>
+            </ul>
+            <el-pagination
+              v-if="showBookingPager"
+              v-model:current-page="bookingPage"
+              :page-size="BOOKING_PAGE_SIZE"
+              :total="listedRecords.length"
+              layout="prev, pager, next"
+              small
+            />
+          </template>
         </template>
-        <label>
-          新密码
-          <input v-model="newPassword" type="password" autocomplete="new-password" />
-        </label>
-        <p v-if="actionError" class="user-manage-error">{{ actionError }}</p>
+        <template v-else>
+          <h3>我的预约</h3>
+          <el-empty v-if="!upcomingBookings.length" description="暂无进行中的预约" :image-size="64" />
+          <div v-else class="user-manage-upcoming">
+            <el-card
+              v-for="item in upcomingBookings"
+              :key="item.id"
+              class="user-manage-upcoming-item"
+              shadow="never"
+            >
+              <p>项目：{{ item.serviceName }}</p>
+              <p v-if="item.employeeName">员工：{{ item.employeeName }}</p>
+              <p>
+                时间：{{ item.dateDisplay || formatBookingDateDisplay(item.date) }}
+                {{ formatClockFromHour(item.startHour) }}–{{
+                  formatClockFromHour(item.startHour + item.durationHours)
+                }}
+              </p>
+              <p v-if="item.remark">备注：{{ item.remark }}</p>
+              <!-- 开约前 30 分钟内不再提供取消 -->
+              <el-button
+                v-if="canUserCancelBooking(item)"
+                type="danger"
+                size="small"
+                :loading="cancellingId === item.id"
+                @click="onCancelBooking(item)"
+              >
+                取消预约
+              </el-button>
+              <p v-else class="user-manage-lock">开约前 30 分钟内不可取消</p>
+            </el-card>
+          </div>
+          <h3>消费记录</h3>
+          <p>总计消费：¥{{ totalSpend }}</p>
+          <el-empty v-if="!spendBookings.length" description="暂无消费记录" :image-size="64" />
+          <template v-else>
+            <ul class="user-manage-bookings">
+              <li v-for="item in pagedBookings" :key="item.id">{{ bookingLine(item) }}</li>
+            </ul>
+            <el-pagination
+              v-if="showBookingPager"
+              v-model:current-page="bookingPage"
+              :page-size="BOOKING_PAGE_SIZE"
+              :total="listedRecords.length"
+              layout="prev, pager, next"
+              small
+            />
+          </template>
+        </template>
+        <el-form label-position="top" class="user-manage-password">
+          <el-form-item label="新密码">
+            <el-input
+              v-model="newPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+            />
+          </el-form-item>
+        </el-form>
+        <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
         <div class="user-manage-actions">
-          <button type="button" :disabled="saving" @click="onSavePassword">保存密码</button>
+          <el-button type="primary" :loading="saving" @click="onSavePassword">保存密码</el-button>
           <!-- 仅管理员能删除普通用户 -->
-          <button
-            v-if="isAdmin"
-            type="button"
-            class="user-manage-danger"
-            :disabled="saving"
-            @click="onDeleteUser"
-          >
+          <el-button v-if="isAdmin" type="danger" :loading="saving" @click="onDeleteUser">
             删除账号
-          </button>
+          </el-button>
         </div>
-      </section>
+      </el-card>
     </div>
   </div>
 </template>
@@ -365,10 +428,6 @@ onMounted(loadPage)
   font-size: 20px;
 }
 
-.user-manage-error {
-  color: #c81e1e;
-}
-
 .user-manage-body {
   display: flex;
   gap: 24px;
@@ -377,84 +436,19 @@ onMounted(loadPage)
 
 /* 左侧：搜索 + 用户列表 */
 .user-manage-aside {
-  width: 240px;
+  width: 260px;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.user-manage-search {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: #52606d;
-}
-
-.user-manage-search input {
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid #cbd2d9;
-  border-radius: 4px;
-  background: #fff;
-}
-
 .user-manage-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  width: 100%;
-  background: #fff;
-  border-radius: 8px;
-  overflow: hidden;
-}
-
-.user-manage-item button {
-  width: 100%;
-  text-align: left;
-  padding: 10px 12px;
-  border: 0;
-  background: none;
-  cursor: pointer;
-}
-
-.user-manage-item.is-active button {
-  background: #e6f2ff;
-  color: #1f4e79;
-}
-
-/* 左侧列表底部分页 */
-.user-manage-pager {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  font-size: 12px;
-  color: #52606d;
-}
-
-.user-manage-pager button {
-  padding: 4px 8px;
-  border: 1px solid #cbd2d9;
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-}
-
-.user-manage-pager button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
+  border-right: none;
 }
 
 .user-manage-detail {
   flex: 1;
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
 
 .user-manage-detail h3 {
@@ -462,46 +456,34 @@ onMounted(loadPage)
   font-size: 15px;
 }
 
-.user-manage-empty {
-  color: #7b8794;
-  font-size: 13px;
-}
-
 .user-manage-bookings {
-  margin: 0;
+  margin: 0 0 8px;
   padding-left: 18px;
 }
 
-.user-manage-detail label {
+.user-manage-upcoming {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: #52606d;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
-.user-manage-detail input {
-  max-width: 260px;
-  padding: 8px;
-  border: 1px solid #cbd2d9;
-  border-radius: 4px;
+.user-manage-upcoming-item p {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
+
+.user-manage-lock {
+  color: #7b8794;
+}
+
+.user-manage-password {
+  max-width: 280px;
+  margin-top: 8px;
 }
 
 .user-manage-actions {
   display: flex;
   gap: 8px;
-}
-
-.user-manage-actions button {
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 4px;
-  background: #1f4e79;
-  color: #fff;
-  cursor: pointer;
-}
-
-.user-manage-danger {
-  background: #c81e1e;
 }
 </style>

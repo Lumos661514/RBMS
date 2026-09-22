@@ -1,6 +1,12 @@
 <script setup>
 import { computed, watch } from 'vue'
-import { formatClockFromHour, isEmployeeBusyInRange, isUserBusyInRange } from '@/utils/schedule'
+import {
+  formatClockFromHour,
+  hourToMinutes,
+  isEmployeeBusyInRange,
+  isEmployeeOnLeave,
+  isUserBusyInRange,
+} from '@/utils/schedule'
 
 const props = defineProps({
   /** 主标题：星期，如周四 */
@@ -54,13 +60,26 @@ const selectedService = computed(
 )
 
 /**
- * 能做当前项目、且本时段空闲的员工。
+ * 本次预约占用的分钟区间，用来判断请假是否挡住。
+ * @returns {{ start: number, end: number } | null}
+ */
+function bookingRangeMinutes() {
+  const service = selectedService.value
+  if (!service || props.startHour == null) return null
+  const start = hourToMinutes(props.startHour)
+  return { start, end: start + hourToMinutes(service.durationHours) }
+}
+
+/**
+ * 能做当前项目、且本时段空闲、该时段未请假的员工。
  */
 const availableEmployees = computed(() => {
   const service = selectedService.value
-  if (!service) return []
+  const range = bookingRangeMinutes()
+  if (!service || !range) return []
   return (props.employees || []).filter((emp) => {
     if (!(emp.serviceIds || []).includes(props.serviceId)) return false
+    if (isEmployeeOnLeave(emp.leaves, emp.id, props.createDate, range.start, range.end)) return false
     return !isEmployeeBusyInRange(
       props.bookings,
       emp.id,
@@ -71,6 +90,26 @@ const availableEmployees = computed(() => {
     )
   })
 })
+
+/**
+ * 能做当前项目但该时段请假的员工，下拉里禁用。
+ */
+const offEmployees = computed(() => {
+  const range = bookingRangeMinutes()
+  if (!range) return []
+  return (props.employees || []).filter((emp) => {
+    if (!(emp.serviceIds || []).includes(props.serviceId)) return false
+    return isEmployeeOnLeave(emp.leaves, emp.id, props.createDate, range.start, range.end)
+  })
+})
+
+/**
+ * 下拉禁用项文案：该时段请假。
+ * @param {{ name: string }} emp
+ */
+function offEmployeeLabel(emp) {
+  return `${emp.name}（请假，不可选）`
+}
 
 /**
  * 管理员代约：排除该时段已有预约的用户。
@@ -129,36 +168,49 @@ watch(
 </script>
 
 <template>
-  <div class="booking-create-dialog" @click.self="emit('close')">
-    <div class="booking-create-dialog-panel" role="dialog">
-      <h2>新建预约</h2>
-      <p>
-        {{ dateTitle }}
-        <template v-if="dateSub">（{{ dateSub }}）</template>
-        {{ formatClockFromHour(startHour) }}
-        起
-      </p>
-      <label>
-        服务种类
-        <select :value="serviceId" @change="emit('update:serviceId', $event.target.value)">
-          <option v-for="item in services" :key="item.id" :value="item.id">
-            {{ item.name }}（{{ durationLabel(item.durationHours) }} · ¥{{ item.price }}）
-          </option>
-        </select>
-      </label>
-      <label>
-        员工
-        <select
-          :value="employeeId"
+  <el-dialog
+    title="新建预约"
+    model-value
+    width="400px"
+    :close-on-click-modal="true"
+    @close="emit('close')"
+  >
+    <p class="booking-create-dialog-lead">
+      {{ dateTitle }}
+      <template v-if="dateSub">（{{ dateSub }}）</template>
+      {{ formatClockFromHour(startHour) }}
+      起
+    </p>
+    <el-form label-position="top">
+      <el-form-item label="服务种类">
+        <el-select :model-value="serviceId" style="width: 100%" @change="emit('update:serviceId', $event)">
+          <el-option
+            v-for="item in services"
+            :key="item.id"
+            :label="`${item.name}（${durationLabel(item.durationHours)} · ¥${item.price}）`"
+            :value="item.id"
+          />
+        </el-select>
+      </el-form-item>
+      <el-form-item label="员工">
+        <el-select
+          :model-value="employeeId"
           :disabled="!availableEmployees.length"
-          @change="emit('update:employeeId', $event.target.value)"
+          style="width: 100%"
+          @change="emit('update:employeeId', $event)"
         >
-          <option v-if="!availableEmployees.length" value="">暂无空闲员工</option>
-          <option v-for="item in availableEmployees" :key="item.id" :value="item.id">
-            {{ item.name }}
-          </option>
-        </select>
-      </label>
+          <el-option v-if="!availableEmployees.length" label="暂无空闲员工" value="" />
+          <el-option v-for="item in availableEmployees" :key="item.id" :label="item.name" :value="item.id" />
+          <!-- 该时段请假：展示但不可选 -->
+          <el-option
+            v-for="item in offEmployees"
+            :key="`off-${item.id}`"
+            :label="offEmployeeLabel(item)"
+            :value="item.id"
+            disabled
+          />
+        </el-select>
+      </el-form-item>
       <!-- 随服务耗时变化，提醒会连占几格 -->
       <p v-if="selectedService" class="booking-create-dialog-hint">
         将占用
@@ -166,118 +218,51 @@ watch(
         {{ formatClockFromHour(startHour + selectedService.durationHours) }}
       </p>
       <!-- 管理员只能帮普通用户约；普通用户绑当前登录账号 -->
-      <label v-if="isAdmin">
-        预约用户
-        <select
-          :value="bookerUserId"
+      <el-form-item v-if="isAdmin" label="预约用户">
+        <el-select
+          :model-value="bookerUserId"
           :disabled="!availableUsers.length"
-          @change="emit('update:bookerUserId', $event.target.value)"
+          style="width: 100%"
+          @change="emit('update:bookerUserId', $event)"
         >
-          <option v-if="!availableUsers.length" value="">暂无可约用户</option>
-          <option v-for="item in availableUsers" :key="item.id" :value="item.id">
-            {{ item.name }}（{{ item.phone }}）
-          </option>
-        </select>
-      </label>
+          <el-option v-if="!availableUsers.length" label="暂无可约用户" value="" />
+          <el-option
+            v-for="item in availableUsers"
+            :key="item.id"
+            :label="`${item.name}（${item.phone}）`"
+            :value="item.id"
+          />
+        </el-select>
+      </el-form-item>
       <p v-else class="booking-create-dialog-hint">预约人：{{ bookerName }}（当前登录账号）</p>
-      <label>
-        备注（可选）
-        <input :value="remark" type="text" @input="emit('update:remark', $event.target.value)" />
-      </label>
-      <!-- 时段冲突等失败文案 -->
-      <p v-if="error" class="booking-create-dialog-error">{{ error }}</p>
-      <div class="booking-create-dialog-actions">
-        <button type="button" class="booking-create-dialog-ghost" @click="emit('close')">取消</button>
-        <button
-          type="button"
-          :disabled="
-            submitting ||
-            !services.length ||
-            !employeeId ||
-            (isAdmin && !bookerUserId)
-          "
-          @click="emit('submit')"
-        >
-          {{ submitting ? '提交中…' : '确认预约' }}
-        </button>
-      </div>
-    </div>
-  </div>
+      <el-form-item label="备注（可选）">
+        <el-input :model-value="remark" @input="emit('update:remark', $event)" />
+      </el-form-item>
+    </el-form>
+    <!-- 时段冲突等失败文案 -->
+    <el-alert v-if="error" :title="error" type="error" :closable="false" show-icon />
+    <template #footer>
+      <el-button @click="emit('close')">取消</el-button>
+      <el-button
+        type="primary"
+        :loading="submitting"
+        :disabled="!services.length || !employeeId || (isAdmin && !bookerUserId)"
+        @click="emit('submit')"
+      >
+        确认预约
+      </el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <style scoped>
-/* 遮罩：点空白关闭 */
-.booking-create-dialog {
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.booking-create-dialog-panel {
-  width: 360px;
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.booking-create-dialog-panel h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.booking-create-dialog-panel p {
-  margin: 0;
-}
-
-.booking-create-dialog-panel label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-  color: #52606d;
-}
-
-.booking-create-dialog-panel input,
-.booking-create-dialog-panel select {
-  padding: 8px;
-  border: 1px solid #cbd2d9;
-  border-radius: 4px;
+.booking-create-dialog-lead {
+  margin: 0 0 12px;
 }
 
 .booking-create-dialog-hint {
+  margin: 0 0 12px;
   font-size: 12px;
   color: #616e7c;
-}
-
-.booking-create-dialog-error {
-  color: #c81e1e;
-  font-size: 13px;
-}
-
-.booking-create-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.booking-create-dialog-actions button {
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 4px;
-  background: #1f4e79;
-  color: #fff;
-  cursor: pointer;
-}
-
-.booking-create-dialog-ghost {
-  background: #e4e7eb;
-  color: #1f2933;
 }
 </style>

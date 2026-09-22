@@ -37,6 +37,18 @@ CREATE TABLE IF NOT EXISTS employee_services (
   CONSTRAINT fk_es_service FOREIGN KEY (service_id) REFERENCES services (id) ON DELETE CASCADE
 );
 
+-- 员工请假时段；结束日可以晚于开始日，重叠格子不计入容量。
+CREATE TABLE IF NOT EXISTS employee_leaves (
+  id VARCHAR(32) PRIMARY KEY,
+  employee_id VARCHAR(32) NOT NULL,
+  leave_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  start_minutes INT NOT NULL,
+  end_minutes INT NOT NULL,
+  CONSTRAINT fk_el_employee FOREIGN KEY (employee_id) REFERENCES employees (id) ON DELETE CASCADE,
+  INDEX idx_el_employee_date (employee_id, leave_date)
+);
+
 -- 预约不级联删用户，账号删除后记录仍保留。
 CREATE TABLE IF NOT EXISTS bookings (
   id VARCHAR(32) PRIMARY KEY,

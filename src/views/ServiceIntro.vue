@@ -1,11 +1,17 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { getServices } from '@/api/services'
+
+const route = useRoute()
+const router = useRouter()
 
 /** 服务列表 */
 const services = ref([])
 const loading = ref(false)
 const loadError = ref('')
+/** 顾客介绍页可带项目进向导；后台介绍页只展示 */
+const canQuickBook = computed(() => route.path === '/book')
 
 /**
  * 时长展示：支持半小时。
@@ -32,25 +38,46 @@ async function loadServices() {
   }
 }
 
+/**
+ * 跳到预约向导并预选该项目。
+ * @param {string} id
+ */
+function goBook(id) {
+  router.push({ path: '/book/schedule', query: { service: id } })
+}
+
 onMounted(loadServices)
 </script>
 
 <template>
   <div class="service-intro">
     <h2 class="service-intro-title">项目介绍</h2>
-    <p class="service-intro-hint">以下为当前可预约的服务项目。</p>
-    <p v-if="loading">加载中…</p>
-    <p v-else-if="loadError" class="service-intro-error">{{ loadError }}</p>
-    <p v-else-if="!services.length" class="service-intro-empty">暂无服务，请管理员在项目管理中添加。</p>
-    <ul v-else class="service-intro-list">
-      <li v-for="item in services" :key="item.id" class="service-intro-card">
-        <h3>{{ item.name }}</h3>
-        <p class="service-intro-meta">
-          价格：¥{{ item.price }} ｜ 时长：{{ durationText(item.durationHours) }}
-        </p>
-        <p class="service-intro-desc">{{ item.description }}</p>
-      </li>
-    </ul>
+    <p class="service-intro-hint">
+      {{ canQuickBook ? '点击预约后选择日期与员工。' : '以下为当前可预约的服务项目。' }}
+    </p>
+    <el-skeleton v-if="loading" :rows="3" animated />
+    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
+    <el-empty v-else-if="!services.length" description="暂无服务，请管理员在项目管理中添加。" />
+    <el-row v-else :gutter="16">
+      <el-col v-for="item in services" :key="item.id" :xs="24" :sm="12" :md="8">
+        <el-card class="service-intro-card" shadow="never">
+          <h3>{{ item.name }}</h3>
+          <p class="service-intro-meta">
+            价格：¥{{ item.price }} ｜ 时长：{{ durationText(item.durationHours) }}
+          </p>
+          <p class="service-intro-desc">{{ item.description }}</p>
+          <!-- 顾客端：带上该项目进入向导选日期 -->
+          <el-button
+            v-if="canQuickBook"
+            class="service-intro-book"
+            type="primary"
+            @click="goBook(item.id)"
+          >
+            预约
+          </el-button>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
@@ -61,31 +88,14 @@ onMounted(loadServices)
   font-size: 20px;
 }
 
-.service-intro-hint,
-.service-intro-empty {
+.service-intro-hint {
   margin: 0 0 16px;
   color: #616e7c;
   font-size: 13px;
 }
 
-.service-intro-error {
-  color: #c81e1e;
-}
-
-.service-intro-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 16px;
-}
-
 .service-intro-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 16px 18px;
-  border: 1px solid #e4e7eb;
+  margin-bottom: 16px;
 }
 
 .service-intro-card h3 {
@@ -105,5 +115,9 @@ onMounted(loadServices)
   font-size: 13px;
   line-height: 1.6;
   color: #3e4c59;
+}
+
+.service-intro-book {
+  margin-top: 12px;
 }
 </style>

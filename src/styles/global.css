@@ -12,6 +12,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   color: #1f2933;
   background: #f3f4f6;
+  /* 跟原后台主色，避免 Element Plus 默认蓝 */
+  --el-color-primary: #1f4e79;
 }
 
 /* 表单控件继承页面字体，避免按钮比表格字号跳变 */

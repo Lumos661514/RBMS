@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
 import { NAME_KEY, ROLE_KEY, USER_ID_KEY } from '@/api/request'
 import { getSettings } from '@/api/settings'
 import { cancelBooking, createBooking, getBookings } from '@/api/booking'
@@ -17,6 +18,7 @@ import {
   isActiveBooking,
   isSlotFullyBooked,
   isSlotStartedOrPast,
+  workingEmployeesAt,
 } from '@/utils/schedule'
 import { DAY_COUNT_DEFAULT, SLOT_MINUTES_DEFAULT } from '@/config/schedule'
 
@@ -114,12 +116,35 @@ function visibleCellBookings(date, startHour) {
 }
 
 /**
- * 该格是否已约满（全体员工都被选）。
+ * 该格可上班员工，与格子重叠的请假不计入容量。
+ * @param {string} date
+ * @param {number} startHour
+ */
+function workingStaff(date, startHour) {
+  return workingEmployeesAt(
+    employeeOptions.value,
+    date,
+    startHour,
+    settings.value.slotMinutes,
+  )
+}
+
+/**
+ * 该格是否已约满（该格可上班员工都被选）。
  * @param {string} date
  * @param {number} startHour
  */
 function isCellFull(date, startHour) {
-  return isSlotFullyBooked(bookings.value, date, startHour, employeeOptions.value)
+  return isSlotFullyBooked(bookings.value, date, startHour, workingStaff(date, startHour))
+}
+
+/**
+ * 有员工名册但该格全员请假。
+ * @param {string} date
+ * @param {number} startHour
+ */
+function isSlotUnstaffed(date, startHour) {
+  return employeeOptions.value.length > 0 && workingStaff(date, startHour).length === 0
 }
 
 /**
@@ -138,9 +163,10 @@ function isPastEmptySlot(date, startHour) {
  */
 function cellLabelText(date, startHour) {
   if (isPastEmptySlot(date, startHour)) return '已过'
-  const total = employeeOptions.value.length
+  if (!employeeOptions.value.length) return '无员工'
+  if (isSlotUnstaffed(date, startHour)) return '无人'
+  const total = workingStaff(date, startHour).length
   const used = cellBookings(date, startHour).length
-  if (!total) return '无员工'
   if (used <= 0) return '预约'
   if (isCellFull(date, startHour)) return `已满 ${used}/${total}`
   return `已约 ${used}/${total}`
@@ -186,7 +212,7 @@ async function loadBoard() {
 }
 
 /**
- * 静默刷新预约，到点后清占用，不打断操作中的弹窗。
+ * 静默刷新预约。服务结束后不再占格，不打断操作中的弹窗。
  */
 async function refreshBookingsQuiet() {
   try {
@@ -226,15 +252,19 @@ function openDetail(col, startHour, list) {
  */
 function openCreate(col, startHour) {
   if (!serviceOptions.value.length) {
-    window.alert('暂无可预约服务，请先在项目管理中添加')
+    ElMessage.warning('暂无可预约服务，请先在项目管理中添加')
     return
   }
   if (!employeeOptions.value.length) {
-    window.alert('暂无员工，请先在员工管理中添加')
+    ElMessage.warning('暂无员工，请先在员工管理中添加')
     return
   }
   if (isAdmin && !userOptions.value.length) {
-    window.alert('暂无普通用户，请先注册用户后再代约')
+    ElMessage.warning('暂无普通用户，请先注册用户后再代约')
+    return
+  }
+  if (isSlotUnstaffed(col.date, startHour)) {
+    ElMessage.warning('该时段员工请假，无法预约')
     return
   }
   createDate.value = col.date
@@ -261,15 +291,19 @@ function onCellClick(col, startHour) {
       openDetail(col, startHour, visible)
       return
     }
-    window.alert('该时段已过，无法预约')
+    ElMessage.warning('该时段已过，无法预约')
     return
   }
   if (visible.length) {
     openDetail(col, startHour, visible)
     return
   }
+  if (isSlotUnstaffed(col.date, startHour)) {
+    ElMessage.warning('该时段员工请假，无法预约')
+    return
+  }
   if (isCellFull(col.date, startHour)) {
-    window.alert(isAdmin ? '该时段员工已约满' : '该时段已满')
+    ElMessage.warning(isAdmin ? '该时段员工已约满' : '该时段已满')
     return
   }
   openCreate(col, startHour)
@@ -356,7 +390,7 @@ async function submitCancel(bookingId) {
       !isSlotStartedOrPast(detailCell.value.date, detailCell.value.startHour) &&
       !isCellFull(detailCell.value.date, detailCell.value.startHour)
   } catch (error) {
-    window.alert(error.message || '取消失败')
+    ElMessage.error(error.message || '取消失败')
   } finally {
     cancellingId.value = ''
   }
@@ -377,17 +411,19 @@ onUnmounted(() => {
     <p class="board-sub">
       营业 {{ formatClockFromHour(settings.startHour) }}–{{ formatClockFromHour(settings.endHour) }}
       ｜ 每格 {{ settings.slotMinutes || SLOT_MINUTES_DEFAULT }} 分钟
-      ｜ 员工 {{ employeeOptions.length }} 人（全员约满才关格）
+      ｜ 员工 {{ employeeOptions.length }} 人（容量按各格可上班人数，请假时段不计入）
       <template v-if="isAdmin">｜ 管理员代约普通用户</template>
+      <!-- 顾客端不展示别人的预约 -->
+      <template v-else>｜ 只显示你自己的预约</template>
     </p>
 
     <!-- 列表加载失败时保留重试，不渲染空表造成「没有班次」的误解 -->
     <div v-if="loadError" class="board-status">
-      <span>{{ loadError }}</span>
-      <button type="button" @click="loadBoard">重试</button>
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadBoard">重试</el-button>
     </div>
     <!-- 首屏等待设置和预约 -->
-    <p v-else-if="loading" class="board-status">加载中…</p>
+    <el-skeleton v-else-if="loading" :rows="6" animated />
 
     <div v-else class="board-table-wrap">
       <table class="board-table">
@@ -407,15 +443,19 @@ onUnmounted(() => {
               v-for="col in dayColumns"
               :key="`${col.date}-${row.startMinutes}`"
               :class="{
-                'is-full': isCellFull(col.date, row.startHour) && !isPastEmptySlot(col.date, row.startHour),
+                'is-full':
+                  isCellFull(col.date, row.startHour) &&
+                  !isPastEmptySlot(col.date, row.startHour) &&
+                  !isSlotUnstaffed(col.date, row.startHour),
                 'is-partial':
                   cellBookings(col.date, row.startHour).length > 0 &&
-                  !isCellFull(col.date, row.startHour) &&
-                  !isSlotStartedOrPast(col.date, row.startHour),
+                  !isCellFull(col.date, row.startHour),
                 'is-free':
                   !cellBookings(col.date, row.startHour).length &&
                   !isPastEmptySlot(col.date, row.startHour) &&
+                  !isSlotUnstaffed(col.date, row.startHour) &&
                   employeeOptions.length > 0,
+                'is-off': isSlotUnstaffed(col.date, row.startHour) && !isPastEmptySlot(col.date, row.startHour),
                 'is-past': isPastEmptySlot(col.date, row.startHour),
               }"
               @click="onCellClick(col, row.startHour)"
@@ -549,6 +589,14 @@ onUnmounted(() => {
   cursor: pointer;
   background: #fde8e8;
   color: #9b1c1c;
+  font-size: 12px;
+}
+
+/* 该格全员请假 */
+.is-off {
+  cursor: not-allowed;
+  color: #7b8794;
+  background: #eef2f6;
   font-size: 12px;
 }
 

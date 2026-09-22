@@ -233,7 +233,33 @@ export function canUserCancelBooking(booking, now = new Date()) {
 }
 
 /**
- * 把已到开始时刻的预约标为 done：看板不再占用，记录仍保留。
+ * 预约结束时刻。时长无效时返回 null，调用方再退回开始时刻。
+ * @param {string} date YYYY-MM-DD
+ * @param {number} startHour
+ * @param {number} durationHours
+ * @returns {Date | null}
+ */
+export function bookingEndAt(date, startHour, durationHours) {
+  const start = bookingStartAt(date, startHour)
+  if (!start) return null
+  const durationMin = hourToMinutes(durationHours)
+  if (!Number.isFinite(durationMin) || durationMin < 0) return null
+  return new Date(start.getTime() + durationMin * 60 * 1000)
+}
+
+/**
+ * 服务是否已经结束。结束时刻起不再占格子；没有合法时长时按开始时刻算。
+ * @param {{ date: string, startHour: number, durationHours?: number }} booking
+ * @param {Date} [now]
+ */
+export function isBookingFinished(booking, now = new Date()) {
+  const end = bookingEndAt(booking.date, booking.startHour, booking.durationHours)
+  if (!end) return isSlotStartedOrPast(booking.date, booking.startHour, now)
+  return now.getTime() >= end.getTime()
+}
+
+/**
+ * 服务结束才标为 done，看板在结束前仍占用。尚未结束却已被标成 done 的改回进行中。
  * @param {object[]} bookings
  * @param {Date} [now]
  * @returns {{ bookings: object[], changed: boolean }}
@@ -241,10 +267,14 @@ export function canUserCancelBooking(booking, now = new Date()) {
 export function settleExpiredBookings(bookings, now = new Date()) {
   let changed = false
   const next = (bookings || []).map((item) => {
-    if (item.status === 'done') return item
-    if (isSlotStartedOrPast(item.date, item.startHour, now)) {
+    const finished = isBookingFinished(item, now)
+    if (finished && item.status !== 'done') {
       changed = true
       return { ...item, status: 'done' }
+    }
+    if (!finished && item.status === 'done') {
+      changed = true
+      return { ...item, status: 'active' }
     }
     if (!item.status) return { ...item, status: 'active' }
     return item
@@ -300,7 +330,229 @@ export function busyEmployeeIdsAtCell(bookings, date, startHour) {
 }
 
 /**
- * 时间段是否已约满：全体员工在该格都已有预约。
+ * 时刻甲是否早于时刻乙。日期不同先比日期，同一天再比分钟。
+ * @param {string} dateA
+ * @param {number} minutesA
+ * @param {string} dateB
+ * @param {number} minutesB
+ */
+function isBeforeLeaveInstant(dateA, minutesA, dateB, minutesB) {
+  if (dateA !== dateB) return dateA < dateB
+  return minutesA < minutesB
+}
+
+/**
+ * 两段请假是否相交。都是左闭右开，结束日可以晚于开始日。
+ * @param {{ date?: string, endDate?: string, startMinutes?: number, endMinutes?: number }} left
+ * @param {{ date?: string, endDate?: string, startMinutes?: number, endMinutes?: number }} right
+ */
+export function leaveRangesOverlap(left, right) {
+  const leftStart = String(left?.date || '').slice(0, 10)
+  const leftEnd = String(left?.endDate || left?.date || '').slice(0, 10)
+  const rightStart = String(right?.date || '').slice(0, 10)
+  const rightEnd = String(right?.endDate || right?.date || '').slice(0, 10)
+  const leftFrom = Number(left?.startMinutes)
+  const leftTo = Number(left?.endMinutes)
+  const rightFrom = Number(right?.startMinutes)
+  const rightTo = Number(right?.endMinutes)
+  if (![leftFrom, leftTo, rightFrom, rightTo].every(Number.isFinite)) return false
+  if (!leftStart || !leftEnd || !rightStart || !rightEnd) return false
+  return (
+    isBeforeLeaveInstant(leftStart, leftFrom, rightEnd, rightTo) &&
+    isBeforeLeaveInstant(rightStart, rightFrom, leftEnd, leftTo)
+  )
+}
+
+/**
+ * 一条请假是否与某天的 [startMinutes, endMinutes) 重叠。可跨天。
+ * @param {{ date?: string, endDate?: string, startMinutes?: number, endMinutes?: number }} leave
+ * @param {string} date YYYY-MM-DD
+ * @param {number} startMinutes
+ * @param {number} endMinutes
+ */
+export function leaveOverlapsRange(leave, date, startMinutes, endMinutes) {
+  return leaveRangesOverlap(leave, {
+    date,
+    endDate: date,
+    startMinutes,
+    endMinutes,
+  })
+}
+
+/**
+ * 请假是否压到该员工尚未结束的预约上。已经结束的不挡请假。
+ * @param {{ date?: string, endDate?: string, startMinutes?: number, endMinutes?: number }} leave
+ * @param {object[]} bookings
+ * @param {string} employeeId
+ * @param {Date} [now]
+ */
+export function leaveOverlapsBooking(leave, bookings, employeeId, now = new Date()) {
+  if (!employeeId) return false
+  return (bookings || []).some((item) => {
+    if (item.employeeId !== employeeId || isBookingFinished(item, now)) return false
+    const day = String(item.date || '').slice(0, 10)
+    const start = hourToMinutes(item.startHour)
+    const end = start + hourToMinutes(item.durationHours)
+    if (!day || !Number.isFinite(end)) return false
+    return leaveOverlapsRange(leave, day, start, end)
+  })
+}
+
+/**
+ * 员工在该时间段是否请假（下拉不可选、该格不计入容量）。
+ * @param {Array<{ employeeId?: string, date: string, startMinutes: number, endMinutes: number }>} leaves
+ * @param {string} employeeId
+ * @param {string} date YYYY-MM-DD
+ * @param {number} startMinutes
+ * @param {number} endMinutes
+ */
+export function isEmployeeOnLeave(leaves, employeeId, date, startMinutes, endMinutes) {
+  if (!employeeId || !date) return false
+  return (leaves || []).some((item) => {
+    if (item.employeeId && item.employeeId !== employeeId) return false
+    return leaveOverlapsRange(item, date, startMinutes, endMinutes)
+  })
+}
+
+/**
+ * 与该时段重叠的请假，用来标「请假」。
+ * @param {Array<{ employeeId?: string, date: string, startMinutes: number, endMinutes: number }>} leaves
+ * @param {string} employeeId
+ * @param {string} date
+ * @param {number} startMinutes
+ * @param {number} endMinutes
+ * @returns {{ date: string, startMinutes: number, endMinutes: number } | null}
+ */
+export function findEmployeeLeaveDuring(leaves, employeeId, date, startMinutes, endMinutes) {
+  return (
+    (leaves || []).find((item) => {
+      if (item.employeeId && item.employeeId !== employeeId) return false
+      return leaveOverlapsRange(item, date, startMinutes, endMinutes)
+    }) || null
+  )
+}
+
+/**
+ * 该格可上班员工：排除与格子重叠的请假。
+ * @param {Array<{ id: string, leaves?: object[] }>} employees
+ * @param {string} date
+ * @param {number} startHour
+ * @param {number} [slotMinutes]
+ */
+export function workingEmployeesAt(employees, date, startHour, slotMinutes = SLOT_MINUTES_DEFAULT) {
+  const slot = normalizeSlotMinutes(slotMinutes)
+  const start = hourToMinutes(startHour)
+  return (employees || []).filter(
+    (emp) => !isEmployeeOnLeave(emp.leaves, emp.id, date, start, start + slot),
+  )
+}
+
+/**
+ * 此刻状态：请假优先于在忙，否则空闲。服务未结束且当前时刻落在预约时长内为在忙。
+ * @param {{ id: string, leaves?: object[] }} employee
+ * @param {Array<{ employeeId?: string, date?: string, startHour: number, durationHours: number, status?: string }>} bookings
+ * @param {Date} [now]
+ * @returns {'leave' | 'busy' | 'free'}
+ */
+export function employeePresence(employee, bookings, now = new Date()) {
+  const date = formatISODate(now)
+  const minutes = now.getHours() * 60 + now.getMinutes()
+  if (isEmployeeOnLeave(employee?.leaves, employee?.id, date, minutes, minutes + 1)) return 'leave'
+  const busy = (bookings || []).some((item) => {
+    if (!employee || item.employeeId !== employee.id || isBookingFinished(item, now)) return false
+    const day = String(item.date || '').slice(0, 10)
+    if (day !== date) return false
+    const start = hourToMinutes(item.startHour)
+    const end = start + hourToMinutes(item.durationHours)
+    return minutes >= start && minutes < end
+  })
+  return busy ? 'busy' : 'free'
+}
+
+/**
+ * 看板一天的占用率：各格进行中预约人次 / 各格可上班人数之和。
+ * @param {object[]} bookings
+ * @param {string} date
+ * @param {Array<{ startHour: number }>} timeRows
+ * @param {Array<{ id: string, leaves?: object[] }>} employees
+ * @param {number} [slotMinutes]
+ */
+export function dayOccupancyRate(bookings, date, timeRows, employees, slotMinutes = SLOT_MINUTES_DEFAULT) {
+  const rows = timeRows || []
+  if (!rows.length) return 0
+  let used = 0
+  let capacity = 0
+  for (const row of rows) {
+    capacity += workingEmployeesAt(employees, date, row.startHour, slotMinutes).length
+    used += findBookingsAtCell(bookings, date, row.startHour).length
+  }
+  if (!capacity) return 0
+  return used / capacity
+}
+
+/**
+ * 按项目汇总营收（含已结束，取消已删不计入）。未到开始时刻的不结算。
+ * @param {object[]} bookings
+ * @param {Date} [now]
+ * @returns {{ name: string, total: number }[]}
+ */
+export function revenueByService(bookings, now = new Date()) {
+  const map = new Map()
+  for (const item of bookings || []) {
+    const start = bookingStartAt(item.date, item.startHour)
+    if (!start || now.getTime() < start.getTime()) continue
+    const name = item.serviceName || item.serviceId || '未命名'
+    const price = Number(item.price)
+    map.set(name, (map.get(name) || 0) + (Number.isFinite(price) ? price : 0))
+  }
+  return [...map.entries()].map(([name, total]) => ({ name, total }))
+}
+
+/**
+ * 员工在给定日期里可上班格子的占用比例。请假重叠的格子不计入容量。
+ * @param {object[]} bookings
+ * @param {Array<{ id: string, name: string, leaves?: object[] }>} employees
+ * @param {string[]} dates
+ * @param {Array<{ startHour: number }>} timeRows
+ * @param {number} [slotMinutes]
+ * @returns {{ id: string, name: string, used: number, capacity: number, rate: number }[]}
+ */
+export function employeeFillRates(
+  bookings,
+  employees,
+  dates,
+  timeRows,
+  slotMinutes = SLOT_MINUTES_DEFAULT,
+) {
+  const rows = timeRows || []
+  const slot = normalizeSlotMinutes(slotMinutes)
+  return (employees || []).map((emp) => {
+    let capacity = 0
+    let used = 0
+    for (const date of dates || []) {
+      for (const row of rows) {
+        const start = hourToMinutes(row.startHour)
+        if (isEmployeeOnLeave(emp.leaves, emp.id, date, start, start + slot)) continue
+        capacity += 1
+        const hit = findBookingsAtCell(bookings, date, row.startHour).some(
+          (item) => item.employeeId === emp.id,
+        )
+        if (hit) used += 1
+      }
+    }
+    return {
+      id: emp.id,
+      name: emp.name,
+      used,
+      capacity,
+      rate: capacity ? used / capacity : 0,
+    }
+  })
+}
+
+/**
+ * 时间段是否已约满：传入的员工列表在该格都已有预约。
+ * 看板应传入当天可上班员工，而不是全部员工。
  * @param {object[]} bookings
  * @param {string} date
  * @param {number} startHour
@@ -372,6 +624,21 @@ export function isUserBusyInRange(
 }
 
 /**
+ * 项目时长须能放进当前时间格：不短于一格，且是格长的整数倍。
+ * @param {number} durationHours
+ * @param {number} [slotMinutes]
+ * @returns {{ ok: boolean, message?: string }}
+ */
+export function durationFitsSlot(durationHours, slotMinutes = SLOT_MINUTES_DEFAULT) {
+  const slot = normalizeSlotMinutes(slotMinutes)
+  const durationMinutes = hourToMinutes(durationHours)
+  if (durationMinutes < slot || durationMinutes % slot !== 0) {
+    return { ok: false, message: `服务时长须为时间段（${slot} 分钟）的整数倍` }
+  }
+  return { ok: true }
+}
+
+/**
  * 创建前：未过点、员工可接该项目且时段空闲、用户未在同时段重复约、时长对齐时间段。
  * @param {object[]} bookings
  * @param {string} date
@@ -380,9 +647,10 @@ export function isUserBusyInRange(
  * @param {number} [endHour]
  * @param {number} [slotMinutes]
  * @param {Date} [now]
- * @param {{ id: string, serviceIds?: string[] } | null} [employee]
+ * @param {{ id: string, serviceIds?: string[], leaves?: object[] } | null} [employee]
  * @param {string} [serviceId]
  * @param {string} [userId]
+ * @param {Array<{ employeeId?: string, date: string, startMinutes: number, endMinutes: number }>} [leaves]
  * @returns {{ ok: boolean, message?: string }}
  */
 export function canCreateBooking(
@@ -396,6 +664,7 @@ export function canCreateBooking(
   employee = null,
   serviceId = '',
   userId = '',
+  leaves = [],
 ) {
   const slot = normalizeSlotMinutes(slotMinutes)
   if (isSlotStartedOrPast(date, startHour, now)) {
@@ -404,12 +673,23 @@ export function canCreateBooking(
   if (startHour + durationHours > endHour) {
     return { ok: false, message: '超出当天营业时间' }
   }
-  const durationMinutes = hourToMinutes(durationHours)
-  if (durationMinutes < slot || durationMinutes % slot !== 0) {
-    return { ok: false, message: `服务时长须为时间段（${slot} 分钟）的整数倍` }
-  }
+  const fit = durationFitsSlot(durationHours, slot)
+  if (!fit.ok) return fit
   if (!employee) {
     return { ok: false, message: '请选择员工' }
+  }
+  const offLeaves = (employee.leaves && employee.leaves.length ? employee.leaves : leaves) || []
+  const startMinutes = hourToMinutes(startHour)
+  if (
+    isEmployeeOnLeave(
+      offLeaves,
+      employee.id,
+      date,
+      startMinutes,
+      startMinutes + hourToMinutes(durationHours),
+    )
+  ) {
+    return { ok: false, message: '该员工该时段请假，不可预约' }
   }
   if (!(employee.serviceIds || []).includes(serviceId)) {
     return { ok: false, message: '该员工无法承接此项目' }
