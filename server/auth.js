@@ -7,10 +7,13 @@ const BCRYPT_ROUNDS = 10
 const JWT_EXPIRES_IN = '7d'
 
 /**
- * 签名用密钥；未配置时用开发兜底，生产应在 .env 写 JWT_SECRET。
+ * 签名用密钥；必须由环境变量提供。
+ * 不留兜底默认值：仓库公开，一旦生产漏配就等于任何人都能伪造任意用户（含管理员）的 token，
+ * 因此缺配置时直接让服务启动失败。
  */
-function jwtSecret() {
-  return process.env.JWT_SECRET || 'dev-jwt-secret'
+const JWT_SECRET = process.env.JWT_SECRET
+if (!JWT_SECRET) {
+  throw new Error('缺少环境变量 JWT_SECRET，请在 .env 中配置一个随机长字符串后再启动')
 }
 
 /**
@@ -30,15 +33,15 @@ export function hashPassword(plain) {
 }
 
 /**
- * 校验登录密码；兼容尚未迁移的明文。
+ * 校验登录密码，只认 bcrypt 哈希。
+ * 启动时 hashPlaintextPasswords 已把旧明文全部迁移（早于 app.listen，不可能有请求漏过去），
+ * 因此不留明文比较分支——留着等于「往库里写明文口令也能登录」。
+ * stored 不是哈希时 bcrypt.compare 直接返回 false，失败关闭。
  * @param {string} plain
  * @param {string} stored
  */
 export async function verifyPassword(plain, stored) {
-  if (isHashedPassword(stored)) {
-    return bcrypt.compare(String(plain), stored)
-  }
-  return String(plain) === String(stored)
+  return bcrypt.compare(String(plain), String(stored))
 }
 
 /**
@@ -46,7 +49,7 @@ export async function verifyPassword(plain, stored) {
  * @param {string} userId
  */
 export function signToken(userId) {
-  return jwt.sign({ sub: String(userId) }, jwtSecret(), { expiresIn: JWT_EXPIRES_IN })
+  return jwt.sign({ sub: String(userId) }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
 }
 
 /**
@@ -55,7 +58,7 @@ export function signToken(userId) {
  */
 export function userIdFromToken(token) {
   try {
-    const payload = jwt.verify(String(token || ''), jwtSecret())
+    const payload = jwt.verify(String(token || ''), JWT_SECRET)
     return payload?.sub ? String(payload.sub) : null
   } catch (error) {
     if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {

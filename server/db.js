@@ -1,11 +1,16 @@
 import mysql from 'mysql2/promise'
 
+// 不留兜底默认密码：仓库公开，漏配就等于把库口令写在代码里。
+// 只要求变量存在而非非空——本机 root 无密码时 .env 写 DB_PASSWORD= 仍然合法。
+if (process.env.DB_PASSWORD === undefined) {
+  throw new Error('缺少环境变量 DB_PASSWORD，请在 .env 中配置（本机 root 无密码就写 DB_PASSWORD=）')
+}
+
 const baseConfig = {
   host: process.env.DB_HOST || '127.0.0.1',
   port: Number(process.env.DB_PORT || 3306),
   user: process.env.DB_USER || 'root',
-  // 空字符串也要保留：本机 root 无密码时 .env 写 DB_PASSWORD=
-  password: process.env.DB_PASSWORD ?? '123456',
+  password: process.env.DB_PASSWORD,
 }
 
 const dbName = process.env.DB_NAME || 'booking'
@@ -18,7 +23,6 @@ export const pool = mysql.createPool({
   connectionLimit: 10,
   dateStrings: true,
   decimalNumbers: true,
-  multipleStatements: true,
 })
 
 /**

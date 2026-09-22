@@ -17,8 +17,12 @@ const ADMIN_NAME = '蔡博闻'
  * 不灌演示项目、员工和预约。
  */
 export async function initDatabase() {
+  // 连接池已关掉 multipleStatements，建表语句按分号拆开逐条执行
   const sql = fs.readFileSync(schemaPath, 'utf8')
-  await pool.query(sql)
+  for (const statement of sql.split(';')) {
+    if (!statement.trim()) continue
+    await pool.query(statement)
+  }
 
   const [users] = await pool.query('SELECT id FROM users LIMIT 1')
   if (!users.length) {

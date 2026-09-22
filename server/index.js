@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { randomUUID } from 'crypto'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -6,7 +7,6 @@ import cors from 'cors'
 import express from 'express'
 import {
   hashPassword,
-  isHashedPassword,
   signToken,
   userIdFromToken,
   verifyPassword,
@@ -116,20 +116,41 @@ async function settleBookings() {
   const mapped = rows.map(mapBooking)
   const settled = settleExpiredBookings(mapped)
   if (!settled.changed) return mapped
+  // 先按目标状态把要翻转的 id 归堆，每种状态一条 UPDATE，替掉逐条 UPDATE 的 N+1
+  const idsByStatus = new Map()
   for (const item of settled.bookings) {
     const prev = mapped.find((row) => row.id === item.id)
-    if (prev && prev.status !== item.status) {
-      await pool.query('UPDATE bookings SET status = ? WHERE id = ?', [item.status, item.id])
+    if (!prev || prev.status === item.status) continue
+    if (!idsByStatus.has(item.status)) idsByStatus.set(item.status, [])
+    idsByStatus.get(item.status).push(item.id)
+  }
+  if (!idsByStatus.size) return settled.bookings
+  const conn = await pool.getConnection()
+  try {
+    // 同一次结算的状态翻转要整体生效，避免看板读到改了一半的状态
+    await conn.beginTransaction()
+    for (const [status, ids] of idsByStatus) {
+      await conn.query('UPDATE bookings SET status = ? WHERE id IN (?)', [status, ids])
     }
+    await conn.commit()
+  } catch (error) {
+    await conn.rollback()
+    throw error
+  } finally {
+    conn.release()
   }
   return settled.bookings
 }
 
 /**
  * @param {import('mysql2/promise').PoolConnection} conn
+ * @param {string} [date] 传入则只取该天。下单校验只看同一天的格子，没必要把历史预约全读进内存；
+ *   请假冲突要跨天比对，所以不传时仍取全量。
  */
-async function listBookings(conn = pool) {
-  const [rows] = await conn.query('SELECT * FROM bookings')
+async function listBookings(conn = pool, date) {
+  const [rows] = date
+    ? await conn.query('SELECT * FROM bookings WHERE date = ?', [date])
+    : await conn.query('SELECT * FROM bookings')
   return rows.map(mapBooking)
 }
 
@@ -357,11 +378,6 @@ app.post('/api/login', async (req, res, next) => {
       res.json(fail('手机号或密码错误'))
       return
     }
-    // 旧明文命中后立刻改成哈希，避免继续明文存放
-    if (!isHashedPassword(row.password)) {
-      const hashed = await hashPassword(password)
-      await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, row.id])
-    }
     const user = mapUser(row)
     res.json(
       ok({
@@ -495,7 +511,16 @@ app.get('/api/occupancy', requireAuth, async (req, res, next) => {
   }
 })
 
-app.post('/api/bookings', requireAuth, async (req, res, next) => {
+/** 下单事务因死锁被牺牲后的最大重试次数。 */
+const BOOKING_DEADLOCK_RETRIES = 3
+
+/**
+ * 跑一次下单事务：锁当天进行中预约 → 二次校验 → 写入。
+ * 业务校验不通过时直接写出失败响应；数据库错误（含死锁）整体回滚后向上抛，由调用方决定是否重试。
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ */
+async function createBookingOnce(req, res) {
   const conn = await pool.getConnection()
   try {
     const me = req.user
@@ -548,7 +573,7 @@ app.post('/api/bookings', requireAuth, async (req, res, next) => {
     const [settingRows] = await conn.query('SELECT * FROM settings WHERE id = 1')
     const settings = settingRows[0]
     const slotMinutes = normalizeSlotMinutes(settings.slot_minutes)
-    const bookings = await listBookings(conn)
+    const bookings = await listBookings(conn, date)
     const check = canCreateBooking(
       bookings,
       date,
@@ -568,7 +593,10 @@ app.post('/api/bookings', requireAuth, async (req, res, next) => {
       return
     }
     const created = {
-      id: `b-${Date.now()}`,
+      // 行锁只覆盖同一天的 active 预约，不同日期的下单会并发走到这里，
+      // 用毫秒时间戳做主键同毫秒即冲突；
+      // 去掉连字符后取 30 位，加上前缀刚好填满 bookings.id 的 VARCHAR(32)
+      id: `b-${randomUUID().replace(/-/g, '').slice(0, 30)}`,
       date,
       dateDisplay: formatBookingDateDisplay(date),
       startHour: payload.startHour,
@@ -611,9 +639,31 @@ app.post('/api/bookings', requireAuth, async (req, res, next) => {
     res.json(ok(created))
   } catch (error) {
     await conn.rollback()
-    next(error)
+    throw error
   } finally {
     conn.release()
+  }
+}
+
+app.post('/api/bookings', requireAuth, async (req, res, next) => {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await createBookingOnce(req, res)
+      return
+    } catch (error) {
+      // 当天还没有预约时 FOR UPDATE 取到的是间隙锁，间隙锁之间相容，
+      // 但各自 INSERT 需要的插入意向锁与别人的间隙锁冲突，并发下单会互等成环。
+      // 被牺牲的事务已整体回滚，没有任何副作用残留，重试是安全的。
+      if (error?.code === 'ER_LOCK_DEADLOCK' && attempt < BOOKING_DEADLOCK_RETRIES) {
+        // 立刻重试会和其他同时被牺牲的事务再次撞在同一个间隙上，
+        // 递增加随机抖动把它们错开，否则高并发下重试仍会成片失败
+        const backoffMs = 20 * (attempt + 1) + Math.floor(Math.random() * 20)
+        await new Promise((resolve) => setTimeout(resolve, backoffMs))
+        continue
+      }
+      next(error)
+      return
+    }
   }
 })
 

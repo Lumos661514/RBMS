@@ -25,12 +25,18 @@ export function clearSession() {
   localStorage.removeItem(USER_ID_KEY)
 }
 
-/** 业务码/HTTP 401 时清登录态；已在登录页则不再跳，避免死循环。 */
+/**
+ * 已发起跳转的标志位：并发请求同时 401 时只跳一次。
+ * 不需要复位——assign 会整页重载，模块状态随之重建。
+ */
+let redirectingToLogin = false
+
+/** 业务码/HTTP 401 时清登录态；已在登录页或已在跳转则不再跳，避免死循环与重复跳转。 */
 function clearAuthAndGoLogin() {
   clearSession()
-  if (window.location.pathname !== '/login') {
-    window.location.assign('/login')
-  }
+  if (redirectingToLogin || window.location.pathname === '/login') return
+  redirectingToLogin = true
+  window.location.assign('/login')
 }
 
 const service = axios.create({
