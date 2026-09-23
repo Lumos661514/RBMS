@@ -18,7 +18,7 @@ function logout() {
 <template>
   <el-container class="app-layout">
     <el-aside class="app-layout-side" width="200px">
-      <h1 class="app-layout-title">预约后台</h1>
+      <h1 class="app-layout-title">门店预约系统</h1>
       <el-menu
         :router="true"
         :default-active="route.path"
@@ -50,7 +50,7 @@ function logout() {
 <style scoped>
 /* 左侧菜单 + 右侧内容的后台壳 */
 .app-layout {
-  min-height: 100vh;
+  min-height: 100dvh;
   min-width: 1000px;
 }
 
@@ -60,14 +60,23 @@ function logout() {
 }
 
 .app-layout-title {
-  margin: 20px 0 12px;
-  font-size: 18px;
-  /* 标题单独居中，菜单项仍靠左 */
-  text-align: center;
+  margin: 28px 20px 16px;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  /* 标题靠左，和菜单项对齐 */
+  text-align: left;
 }
 
 .app-layout-side :deep(.el-menu) {
   border-right: none;
+}
+
+/* 当前项字色和底色太接近，点击后看不出选中 */
+.app-layout-side :deep(.el-menu-item.is-active) {
+  color: #fff !important;
+  background-color: #163a5c !important;
 }
 
 .app-layout-bar {
@@ -75,11 +84,12 @@ function logout() {
   justify-content: flex-end;
   align-items: center;
   gap: 12px;
-  background: #fff;
-  border-bottom: 1px solid #e4e7eb;
+  height: 64px;
+  background: #eef1f4;
+  border-bottom: 1px solid #d9dee3;
 }
 
 .app-layout-body {
-  background: #f3f4f6;
+  background: #eef1f4;
 }
 </style>

@@ -6,11 +6,11 @@ import { pool } from './db.js'
 
 const schemaPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql')
 
-/** 空库写入的内置管理员，不出现在用户管理列表。 */
+/** 空库写入的内置店长，不出现在用户管理列表。 */
 const ADMIN_ID = 'u-admin'
-const ADMIN_PHONE = '15158572063'
+const ADMIN_PHONE = '13800138001'
 const ADMIN_PASSWORD = '123456'
-const ADMIN_NAME = '蔡博闻'
+const ADMIN_NAME = '店长'
 
 /**
  * 建表；users 为空时只写入内置管理员，settings 为空时写入营业默认值。

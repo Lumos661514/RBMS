@@ -392,6 +392,9 @@ app.post('/api/login', async (req, res, next) => {
   }
 })
 
+/** 演示站注册时间戳，用来挡住脚本连续注册 */
+const registerHits = []
+
 app.post('/api/register', async (req, res, next) => {
   try {
     const phone = String(req.body?.phone || '').trim()
@@ -401,6 +404,19 @@ app.post('/api/register', async (req, res, next) => {
       res.json(fail('请填写手机号、姓名和密码'))
       return
     }
+    // 公开注册会被脚本灌入随机姓名；手机号和姓名先做基本格式限制
+    if (!/^1\d{10}$/.test(phone) || name.length > 8) {
+      res.json(fail('请填写 11 位手机号和不超过 8 个字的姓名'))
+      return
+    }
+    const now = Date.now()
+    while (registerHits.length && now - registerHits[0] > 60 * 60 * 1000) registerHits.shift()
+    if (registerHits.length >= 5) {
+      res.json(fail('注册过于频繁，请稍后再试'))
+      return
+    }
+    // 先占名额再写库。校验在哈希之前，并发请求不能同时穿过次数检查
+    registerHits.push(now)
     const [exists] = await pool.query('SELECT id FROM users WHERE phone = ?', [phone])
     if (exists.length) {
       res.json(fail('该手机号已注册'))
@@ -794,6 +810,25 @@ app.put('/api/employees/:id', requireAuth, async (req, res, next) => {
       conn.release()
     }
     res.json(ok({ id: target.id, ...parsed.data }))
+  } catch (error) {
+    next(error)
+  }
+})
+
+app.delete('/api/employees/:id', requireAuth, async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      res.json(fail('没有权限'))
+      return
+    }
+    const target = await findEmployee(req.params.id)
+    if (!target) {
+      res.json(fail('员工不存在'))
+      return
+    }
+    // 可做项目、请假随外键级联删除；预约不挂外键，记录仍保留当时的员工姓名
+    await pool.query('DELETE FROM employees WHERE id = ?', [target.id])
+    res.json(ok({ id: target.id }))
   } catch (error) {
     next(error)
   }

@@ -50,7 +50,7 @@ async function onSubmit() {
 <template>
   <div class="register-page">
     <el-card class="register-card" shadow="never">
-      <h1>预约系统</h1>
+      <h1>门店预约系统</h1>
       <p class="register-lead">填写手机号、姓名和密码完成注册。</p>
       <!-- 标签放在输入框上方，与登录页同一套排版，避免标签字数不同导致框宽错位 -->
       <el-form label-position="top" @submit.prevent="onSubmit">
@@ -83,30 +83,45 @@ async function onSubmit() {
 </template>
 
 <style scoped>
-/* 注册页：与登录页同一套居中卡片 */
+/* 注册页跟登录页同一套居中白底 */
 .register-page {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 48px 24px;
 }
 
 .register-card {
-  width: 380px;
+  width: 400px;
+  border: 1px solid #d9dee3;
+  border-radius: 2px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.register-card :deep(.el-card__body) {
+  padding: 36px 32px 32px;
+}
+
+.register-card :deep(.el-input) {
+  width: 100%;
 }
 
 .register-card h1 {
-  margin: 0 0 8px;
-  font-size: 20px;
-  text-align: center;
+  margin: 0 0 12px;
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
 }
 
 .register-lead {
-  margin: 0 0 16px;
-  text-align: center;
-  font-size: 13px;
-  color: #616e7c;
+  margin: 0 0 28px;
+  max-width: 36ch;
+  font-size: 16px;
+  line-height: 1.6;
+  color: #5c6770;
 }
 
 .register-extra {

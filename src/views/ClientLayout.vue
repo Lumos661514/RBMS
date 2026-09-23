@@ -23,7 +23,7 @@ function logout() {
 <template>
   <div class="client-layout">
     <el-header class="client-layout-bar">
-      <div class="client-layout-brand">在线预约</div>
+      <div class="client-layout-brand">门店预约系统</div>
       <el-menu
         class="client-layout-nav"
         mode="horizontal"
@@ -47,7 +47,7 @@ function logout() {
 <style scoped>
 /* 顾客端：顶栏导航，和左侧后台壳区分 */
 .client-layout {
-  min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
 }
@@ -56,22 +56,33 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 16px;
-  height: auto;
-  padding: 0 24px;
-  background: #fff;
-  border-bottom: 1px solid #e4e7eb;
+  height: 64px;
+  padding: 0 28px;
+  background: #eef1f4;
+  border-bottom: 1px solid #d9dee3;
 }
 
 .client-layout-brand {
-  font-size: 18px;
-  font-weight: 700;
-  color: #1f4e79;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: #1c2430;
   flex-shrink: 0;
 }
 
 .client-layout-nav {
   flex: 1;
   border-bottom: none;
+  background: transparent;
+  --el-menu-bg-color: transparent;
+  --el-menu-hover-bg-color: transparent;
+}
+
+/* 顶栏当前项用底边标出，避免和未选中项一样 */
+.client-layout-nav :deep(.el-menu-item.is-active) {
+  color: #1f4e79 !important;
+  border-bottom-color: #1f4e79 !important;
+  background: transparent !important;
 }
 
 .client-layout-user {
@@ -83,6 +94,6 @@ function logout() {
 
 .client-layout-body {
   flex: 1;
-  background: #f3f4f6;
+  background: #eef1f4;
 }
 </style>

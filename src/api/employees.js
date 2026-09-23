@@ -23,3 +23,11 @@ export function createEmployee(payload) {
 export function updateEmployee(id, payload) {
   return request.put(`/employees/${id}`, payload)
 }
+
+/**
+ * 删除员工；仅管理员。可做项目和请假随外键删掉，已有预约仍保留当时姓名。
+ * @param {string} id
+ */
+export function deleteEmployee(id) {
+  return request.delete(`/employees/${id}`)
+}

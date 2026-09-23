@@ -9,11 +9,14 @@ html,
 body {
   margin: 0;
   min-width: 1000px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #1f2933;
-  background: #f3f4f6;
-  /* 跟原后台主色，避免 Element Plus 默认蓝 */
+  /* 不用 Inter。一套冷灰加唯一主色，登录页和后台共用 */
+  font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
+  color: #1c2430;
+  background: #eef1f4;
   --el-color-primary: #1f4e79;
+  --el-border-radius-base: 2px;
+  --el-border-radius-small: 2px;
+  --el-font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
 /* 表单控件继承页面字体，避免按钮比表格字号跳变 */

@@ -1,7 +1,7 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
-import { ElMessage } from 'element-plus'
-import { createEmployee, getEmployees, updateEmployee } from '@/api/employees'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { createEmployee, deleteEmployee, getEmployees, updateEmployee } from '@/api/employees'
 import { getBookings } from '@/api/booking'
 import { getServices } from '@/api/services'
 import { getSettings } from '@/api/settings'
@@ -349,6 +349,33 @@ async function onSubmit() {
   }
 }
 
+/**
+ * 删除当前正在编辑的员工。可做项目和请假一并去掉，已有预约仍保留当时姓名。
+ */
+async function onDelete() {
+  if (!editingId.value) return
+  try {
+    await ElMessageBox.confirm('删除后看板和下拉不再显示该员工，已有预约仍保留当时姓名。', '删除员工', {
+      type: 'warning',
+    })
+  } catch (error) {
+    if (error === 'cancel' || error === 'close') return
+    throw error
+  }
+  actionError.value = ''
+  saving.value = true
+  try {
+    await deleteEmployee(editingId.value)
+    await loadPage()
+    startCreate()
+    ElMessage.success('已删除')
+  } catch (error) {
+    actionError.value = error.message || '删除失败'
+  } finally {
+    saving.value = false
+  }
+}
+
 onMounted(() => {
   loadPage()
   startCreate()
@@ -363,7 +390,7 @@ onUnmounted(() => {
   <div class="employee-manage">
     <h2 class="employee-manage-title">员工管理</h2>
     <p class="employee-manage-hint">
-      为员工配置可做项目，并按营业时间内的时段请假。已有预约的时段不能请假，请假重叠的格子不计入容量。
+      为员工配置可做项目，并按营业时间内的时段请假。已有预约的时段不能请假，请假重叠的格子不计入容量。删除员工后，已有预约仍保留当时姓名。
     </p>
 
     <el-skeleton v-if="loading" :rows="4" animated />
@@ -451,6 +478,8 @@ onUnmounted(() => {
               {{ editingId ? '保存修改' : '添加员工' }}
             </el-button>
             <el-button v-if="editingId" @click="startCreate">改为新增</el-button>
+            <!-- 只有正在编辑已有员工时才能删，新增表单不出现 -->
+            <el-button v-if="editingId" type="danger" :loading="saving" @click="onDelete">删除员工</el-button>
           </div>
         </el-form>
       </el-card>
@@ -485,6 +514,8 @@ onUnmounted(() => {
 
 .employee-manage-list {
   width: 280px;
+  flex-shrink: 0;
+  overflow: hidden;
   border-right: none;
 }
 
@@ -492,20 +523,31 @@ onUnmounted(() => {
 .employee-manage-list :deep(.el-menu-item) {
   height: auto;
   line-height: 1.4;
-  white-space: normal;
+  /* 组件默认不换行，长姓名会撑出列宽盖住表单 */
+  white-space: normal !important;
+  overflow: hidden;
   align-items: flex-start;
   padding: 10px 16px;
 }
 
+/* 长姓名默认把格子撑宽，会盖住右侧表单；限制在列宽内换行 */
 .employee-manage-list :deep(.el-menu-item span) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 选中的员工用底色标出，只改字色不够明显 */
+.employee-manage-list :deep(.el-menu-item.is-active) {
+  background: #e7eef5;
 }
 
 .employee-manage-list strong {
   font-weight: 600;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .employee-manage-list em {
@@ -514,6 +556,7 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 1.4;
   color: #7b8794;
+  overflow-wrap: anywhere;
 }
 
 /* 当前状态：请假、在忙、空闲 */

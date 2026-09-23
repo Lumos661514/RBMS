@@ -197,6 +197,8 @@ onMounted(() => {
 
 .service-manage-list {
   width: 260px;
+  flex-shrink: 0;
+  overflow: hidden;
   border-right: none;
 }
 
@@ -204,20 +206,31 @@ onMounted(() => {
 .service-manage-list :deep(.el-menu-item) {
   height: auto;
   line-height: 1.4;
-  white-space: normal;
+  /* 组件默认不换行，长名称会撑出列宽盖住表单 */
+  white-space: normal !important;
+  overflow: hidden;
   align-items: flex-start;
   padding: 10px 16px;
 }
 
+/* 长名称默认把格子撑宽，会盖住右侧表单；限制在列宽内换行 */
 .service-manage-list :deep(.el-menu-item span) {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* 选中的项目用底色标出，只改字色不够明显 */
+.service-manage-list :deep(.el-menu-item.is-active) {
+  background: #e7eef5;
 }
 
 .service-manage-list strong {
   font-weight: 600;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .service-manage-list em {
@@ -226,6 +239,7 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.4;
   color: #7b8794;
+  overflow-wrap: anywhere;
 }
 
 .service-manage-form {
