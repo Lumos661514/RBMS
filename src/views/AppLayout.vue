@@ -69,6 +69,8 @@ function logout() {
 /* 左侧石墨轨 + 右侧工作面 */
 .app-layout {
   min-height: 100dvh;
+  /* 看板表格按桌面宽度排，管理端保持原来的最小宽度；顾客端不套这层 */
+  min-width: 1000px;
 }
 
 .app-layout-side {

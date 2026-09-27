@@ -1,10 +1,12 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { deleteUser, getUserDetail, getUsers, updateUserPassword } from '@/api/user'
 import { cancelBooking } from '@/api/booking'
 import { ROLE_KEY, USER_ID_KEY } from '@/api/request'
 import { WEEKDAY_LABELS } from '@/config/schedule'
+import { validateNewPassword, validateSelfPasswordChange } from '@/utils/password'
 import {
   canUserCancelBooking,
   formatBookingDateDisplay,
@@ -15,6 +17,20 @@ import {
 /** 管理员看列表；普通用户只看自己 */
 const isAdmin = localStorage.getItem(ROLE_KEY) === 'admin'
 const myId = localStorage.getItem(USER_ID_KEY) || ''
+const route = useRoute()
+
+/** 顾客端「我的」分页：个人信息 / 预约 / 消费 / 改密 */
+const accountTabItems = [
+  { name: 'profile', label: '个人信息' },
+  { name: 'bookings', label: '我的预约' },
+  { name: 'spend', label: '消费记录' },
+  { name: 'password', label: '修改密码' },
+]
+const accountTab = ref('profile')
+const tabQuery = typeof route.query.tab === 'string' ? route.query.tab : ''
+if (!isAdmin && accountTabItems.some((item) => item.name === tabQuery)) {
+  accountTab.value = tabQuery
+}
 
 /** 管理员看到的普通用户列表 */
 const users = ref([])
@@ -22,8 +38,10 @@ const users = ref([])
 const detailUser = ref(null)
 /** 该用户名下的预约 */
 const detailBookings = ref([])
-/** 新密码输入 */
+/** 顾客改密要填原密码，并再输一次新密码；管理员重置只填新密码 */
+const oldPassword = ref('')
 const newPassword = ref('')
+const confirmPassword = ref('')
 const loading = ref(false)
 /** 首屏加载失败 */
 const loadError = ref('')
@@ -158,6 +176,11 @@ watch(keyword, () => {
   currentPage.value = 1
 })
 
+/** 顾客换分页时清掉上一页的报错，避免密码错误留在预约页 */
+watch(accountTab, () => {
+  actionError.value = ''
+})
+
 /** 删除用户后总页数变少时，把当前页夹回末页 */
 watch(totalPages, (pages) => {
   if (currentPage.value > pages) currentPage.value = pages
@@ -177,7 +200,9 @@ async function loadDetail(id) {
   detailUser.value = data.user
   detailBookings.value = data.bookings || []
   bookingPage.value = 1
+  oldPassword.value = ''
   newPassword.value = ''
+  confirmPassword.value = ''
   actionError.value = ''
 }
 
@@ -224,15 +249,39 @@ async function loadPage() {
  */
 async function onSavePassword() {
   if (!detailUser.value) return
-  if (!newPassword.value) {
-    actionError.value = '请填写新密码'
-    return
+  actionError.value = ''
+  let password = ''
+  /** 顾客改自己的密码时带上原密码和确认密码；管理员重置不带 */
+  let extra
+  if (isAdmin) {
+    const checked = validateNewPassword(newPassword.value)
+    if (!checked.ok) {
+      actionError.value = checked.message
+      return
+    }
+    password = checked.password
+  } else {
+    const checked = validateSelfPasswordChange({
+      oldPassword: oldPassword.value,
+      newPassword: newPassword.value,
+      confirmPassword: confirmPassword.value,
+    })
+    if (!checked.ok) {
+      actionError.value = checked.message
+      return
+    }
+    password = checked.password
+    extra = {
+      oldPassword: checked.oldPassword,
+      confirmPassword: confirmPassword.value,
+    }
   }
   saving.value = true
-  actionError.value = ''
   try {
-    await updateUserPassword(detailUser.value.id, newPassword.value)
+    await updateUserPassword(detailUser.value.id, password, extra)
+    oldPassword.value = ''
     newPassword.value = ''
+    confirmPassword.value = ''
     ElMessage.success('密码已更新')
   } catch (error) {
     actionError.value = error.message || '修改失败'
@@ -294,12 +343,12 @@ onMounted(loadPage)
 
 <template>
   <div class="user-manage">
-    <h2 class="page-title">{{ isAdmin ? '用户管理' : '个人信息' }}</h2>
+    <h2 class="page-title">{{ isAdmin ? '用户管理' : '我的' }}</h2>
     <p class="page-hint">
       {{
         isAdmin
           ? '搜索并选择左侧用户，可查看预约、改密或删除账号。'
-          : '查看进行中的预约与消费记录，也可修改登录密码。'
+          : '查看个人资料、进行中的预约和消费记录，或修改登录密码。'
       }}
     </p>
     <!-- 加载或接口失败 -->
@@ -309,7 +358,7 @@ onMounted(loadPage)
       <el-button type="primary" @click="loadPage">重试</el-button>
     </div>
 
-    <div v-else :class="isAdmin ? 'desk-split' : 'user-manage-solo'">
+    <div v-else-if="isAdmin" class="desk-split">
       <!-- 管理员：左侧普通用户列表 + 搜索 -->
       <div v-if="isAdmin" class="user-manage-aside">
         <el-input
@@ -354,28 +403,73 @@ onMounted(loadPage)
       <section v-if="detailUser" class="desk-panel user-manage-detail">
         <p class="user-manage-field">姓名：{{ detailUser.name }}</p>
         <p class="user-manage-field">手机号：{{ detailUser.phone }}</p>
-        <!-- 管理员仍看该用户全部预约合计；顾客总计只来自到点后的消费记录 -->
-        <p v-if="isAdmin" class="user-manage-field">总计消费：¥{{ totalSpend }}</p>
-        <template v-if="isAdmin">
-          <h3 class="desk-section-title">预约记录</h3>
-          <el-empty v-if="!detailBookings.length" description="暂无预约" :image-size="64" />
-          <template v-else>
-            <ul class="user-manage-bookings">
-              <li v-for="item in pagedBookings" :key="item.id">{{ bookingLine(item) }}</li>
-            </ul>
-            <el-pagination
-              v-if="showBookingPager"
-              v-model:current-page="bookingPage"
-              :page-size="BOOKING_PAGE_SIZE"
-              :total="listedRecords.length"
-              layout="prev, pager, next"
-              small
-            />
-          </template>
-        </template>
+        <p class="user-manage-field">总计消费：¥{{ totalSpend }}</p>
+        <h3 class="desk-section-title">预约记录</h3>
+        <el-empty v-if="!detailBookings.length" description="暂无预约" :image-size="64" />
         <template v-else>
-          <h3 class="desk-section-title">我的预约</h3>
-          <el-empty v-if="!upcomingBookings.length" description="暂无进行中的预约" :image-size="64" />
+          <ul class="user-manage-bookings">
+            <li v-for="item in pagedBookings" :key="item.id">{{ bookingLine(item) }}</li>
+          </ul>
+          <el-pagination
+            v-if="showBookingPager"
+            v-model:current-page="bookingPage"
+            :page-size="BOOKING_PAGE_SIZE"
+            :total="listedRecords.length"
+            layout="prev, pager, next"
+            small
+          />
+        </template>
+        <el-form label-position="top" class="user-manage-password" @submit.prevent="onSavePassword">
+          <el-form-item label="新密码">
+            <el-input
+              v-model="newPassword"
+              type="password"
+              show-password
+              autocomplete="new-password"
+            />
+          </el-form-item>
+        </el-form>
+        <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
+        <div class="desk-actions">
+          <el-button type="primary" :loading="saving" @click="onSavePassword">保存密码</el-button>
+          <el-button type="danger" :loading="saving" @click="onDeleteUser">删除账号</el-button>
+        </div>
+      </section>
+      <!-- 管理员未选用户时给右侧空态，避免空白主栏 -->
+      <div v-else class="desk-panel user-manage-empty">
+        <el-empty
+          :description="emptyAdminList ? '暂无普通用户' : '请选择左侧用户'"
+          :image-size="72"
+        />
+      </div>
+    </div>
+
+    <!-- 顾客端：四个分页，改密单独一页，避免和预约挤在同一张卡片里 -->
+    <div v-else-if="detailUser" class="user-manage-account">
+      <div class="user-manage-tabbar" role="tablist" aria-label="我的">
+        <button
+          v-for="tab in accountTabItems"
+          :key="tab.name"
+          type="button"
+          role="tab"
+          :aria-selected="accountTab === tab.name"
+          :class="{ 'is-active': accountTab === tab.name }"
+          @click="accountTab = tab.name"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
+      <div v-show="accountTab === 'profile'" role="tabpanel">
+        <p class="user-manage-field">姓名：{{ detailUser.name }}</p>
+        <p class="user-manage-field">手机号：{{ detailUser.phone }}</p>
+      </div>
+      <div v-show="accountTab === 'bookings'" role="tabpanel">
+          <el-empty
+            v-if="!upcomingBookings.length"
+            class="user-manage-empty-state"
+            description="暂无进行中的预约"
+            :image-size="72"
+          />
           <div v-else class="user-manage-upcoming">
             <article
               v-for="item in upcomingBookings"
@@ -404,9 +498,15 @@ onMounted(loadPage)
               <p v-else class="user-manage-lock">开约前 30 分钟内不可取消</p>
             </article>
           </div>
-          <h3 class="desk-section-title">消费记录</h3>
+      </div>
+      <div v-show="accountTab === 'spend'" role="tabpanel">
           <p class="user-manage-field">总计消费：¥{{ totalSpend }}</p>
-          <el-empty v-if="!spendBookings.length" description="暂无消费记录" :image-size="64" />
+          <el-empty
+            v-if="!spendBookings.length"
+            class="user-manage-empty-state"
+            description="暂无消费记录"
+            :image-size="72"
+          />
           <template v-else>
             <ul class="user-manage-bookings">
               <li v-for="item in pagedBookings" :key="item.id">{{ bookingLine(item) }}</li>
@@ -420,45 +520,99 @@ onMounted(loadPage)
               small
             />
           </template>
-        </template>
-        <el-form label-position="top" class="user-manage-password">
-          <el-form-item label="新密码">
-            <el-input
-              v-model="newPassword"
-              type="password"
-              show-password
-              autocomplete="new-password"
-            />
-          </el-form-item>
-        </el-form>
-        <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
-        <div class="desk-actions">
-          <el-button type="primary" :loading="saving" @click="onSavePassword">保存密码</el-button>
-          <!-- 仅管理员能删除普通用户 -->
-          <el-button v-if="isAdmin" type="danger" :loading="saving" @click="onDeleteUser">
-            删除账号
-          </el-button>
-        </div>
-      </section>
-      <!-- 管理员未选用户时给右侧空态，避免空白主栏 -->
-      <div v-else-if="isAdmin" class="desk-panel user-manage-empty">
-        <el-empty
-          :description="emptyAdminList ? '暂无普通用户' : '请选择左侧用户'"
-          :image-size="72"
-        />
       </div>
+      <div v-show="accountTab === 'password'" role="tabpanel">
+          <el-form label-position="top" class="user-manage-password" @submit.prevent="onSavePassword">
+            <el-form-item label="原密码">
+              <el-input
+                v-model="oldPassword"
+                type="password"
+                show-password
+                autocomplete="current-password"
+              />
+            </el-form-item>
+            <el-form-item label="新密码">
+              <el-input
+                v-model="newPassword"
+                type="password"
+                show-password
+                autocomplete="new-password"
+                placeholder="至少 6 位"
+              />
+            </el-form-item>
+            <el-form-item label="确认新密码">
+              <el-input
+                v-model="confirmPassword"
+                type="password"
+                show-password
+                autocomplete="new-password"
+              />
+            </el-form-item>
+            <el-button
+              class="user-manage-password-submit"
+              type="primary"
+              native-type="submit"
+              :loading="saving"
+            >
+              保存密码
+            </el-button>
+          </el-form>
+      </div>
+      <el-alert
+        v-if="actionError"
+        class="user-manage-alert"
+        :title="actionError"
+        type="error"
+        :closable="false"
+        show-icon
+      />
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 用户管理：值班台分栏；顾客端单独面板 */
-.user-manage-solo {
-  max-width: 560px;
+/* 用户管理：值班台分栏。顾客端用分页，不再把资料、预约、改密塞进一张卡片。 */
+.user-manage-account {
+  max-width: 640px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-surface);
-  overflow: hidden;
+  padding: 4px 16px 20px;
+}
+
+.user-manage-tabbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+  margin: 0 0 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.user-manage-tabbar button {
+  margin: 0;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.user-manage-tabbar button.is-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
+}
+
+.user-manage-empty-state {
+  width: 100%;
+  padding: 12px 0 4px;
+}
+
+.user-manage-alert {
+  margin-top: 12px;
 }
 
 .user-manage-aside {
@@ -517,7 +671,27 @@ onMounted(loadPage)
 }
 
 .user-manage-password {
-  max-width: 280px;
+  max-width: 320px;
   margin-top: 12px;
+}
+
+.user-manage-bookings,
+.user-manage-upcoming-item {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 720px) {
+  .user-manage-account {
+    max-width: none;
+    padding: 0 12px 16px;
+  }
+
+  .user-manage-password {
+    max-width: none;
+  }
+
+  .user-manage-password-submit {
+    width: 100%;
+  }
 }
 </style>

@@ -26,6 +26,8 @@ import {
   normalizeSlotMinutes,
   settleExpiredBookings,
 } from '../src/utils/schedule.js'
+import { validateNewPassword, validateSelfPasswordChange } from '../src/utils/password.js'
+import { parseServiceImageUrl, serviceDescriptionText } from '../src/utils/serviceText.js'
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -105,6 +107,7 @@ function mapService(row) {
     price: Number(row.price),
     durationHours: Number(row.duration_hours),
     description: row.description,
+    imageUrl: row.image_url || '',
   }
 }
 
@@ -330,7 +333,7 @@ async function currentSlotMinutes() {
  */
 function parseServicePayload(payload, slotMinutes) {
   const name = String(payload.name || '').trim()
-  const description = String(payload.description || '').trim()
+  const description = serviceDescriptionText(payload.description)
   const price = Number(payload.price)
   const durationHours = Number(payload.durationHours)
   if (!name) return { ok: false, message: '请填写服务名称' }
@@ -340,8 +343,9 @@ function parseServicePayload(payload, slotMinutes) {
   }
   const fit = durationFitsSlot(durationHours, slotMinutes)
   if (!fit.ok) return { ok: false, message: fit.message }
-  if (!description) return { ok: false, message: '请填写简单介绍' }
-  return { ok: true, data: { name, price, durationHours, description } }
+  const image = parseServiceImageUrl(payload.imageUrl)
+  if (!image.ok) return image
+  return { ok: true, data: { name, price, durationHours, description, imageUrl: image.imageUrl } }
 }
 
 /**
@@ -856,8 +860,15 @@ app.post('/api/services', requireAuth, async (req, res, next) => {
     }
     const created = { id: `s-${Date.now()}`, ...parsed.data }
     await pool.query(
-      'INSERT INTO services (id, name, price, duration_hours, description) VALUES (?, ?, ?, ?, ?)',
-      [created.id, created.name, created.price, created.durationHours, created.description],
+      'INSERT INTO services (id, name, price, duration_hours, description, image_url) VALUES (?, ?, ?, ?, ?, ?)',
+      [
+        created.id,
+        created.name,
+        created.price,
+        created.durationHours,
+        created.description,
+        created.imageUrl,
+      ],
     )
     res.json(ok(created))
   } catch (error) {
@@ -882,8 +893,15 @@ app.put('/api/services/:id', requireAuth, async (req, res, next) => {
       return
     }
     await pool.query(
-      'UPDATE services SET name = ?, price = ?, duration_hours = ?, description = ? WHERE id = ?',
-      [parsed.data.name, parsed.data.price, parsed.data.durationHours, parsed.data.description, target.id],
+      'UPDATE services SET name = ?, price = ?, duration_hours = ?, description = ?, image_url = ? WHERE id = ?',
+      [
+        parsed.data.name,
+        parsed.data.price,
+        parsed.data.durationHours,
+        parsed.data.description,
+        parsed.data.imageUrl,
+        target.id,
+      ],
     )
     res.json(ok({ id: target.id, ...parsed.data }))
   } catch (error) {
@@ -936,12 +954,37 @@ app.put('/api/users/:id/password', requireAuth, async (req, res, next) => {
       res.json(fail('没有权限'))
       return
     }
-    const password = String(req.body?.password || '')
-    if (!password) {
-      res.json(fail('请填写新密码'))
+    // 管理员重置别人的密码，不要求原密码。顾客改自己的必须核对原密码，并提交两次相同的新密码。
+    const adminReset = me.role === 'admin' && me.id !== target.id
+    let nextPassword = ''
+    if (adminReset) {
+      const checked = validateNewPassword(req.body?.password)
+      if (!checked.ok) {
+        res.json(fail(checked.message))
+        return
+      }
+      nextPassword = checked.password
+    } else if (me.id !== target.id) {
+      res.json(fail('没有权限'))
       return
+    } else {
+      const checked = validateSelfPasswordChange({
+        oldPassword: req.body?.oldPassword,
+        newPassword: req.body?.password,
+        confirmPassword: req.body?.confirmPassword,
+      })
+      if (!checked.ok) {
+        res.json(fail(checked.message))
+        return
+      }
+      const matched = await verifyPassword(checked.oldPassword, target.password)
+      if (!matched) {
+        res.json(fail('原密码不正确'))
+        return
+      }
+      nextPassword = checked.password
     }
-    const hashed = await hashPassword(password)
+    const hashed = await hashPassword(nextPassword)
     await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, target.id])
     res.json(ok({ id: target.id }))
   } catch (error) {

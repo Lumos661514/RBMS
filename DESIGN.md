@@ -39,7 +39,7 @@ Shared in `global.css`:
 - **Admin rail:** Custom graphite nav, copper tick
 - **Board:** Ledger table; free/partial/full/off/past mapped to teal/copper/paper
 - **Customer shell:** Light top bar with copper underline active (portal contrast)
-- **Client book:** Text steps + chip selectors (no el-steps / el-card)
+- **Client book:** el-steps（选日期 / 员工与时段 / 确认）+ chip selectors; unavailable slots stay visible and disabled
 
 ## Motion
 

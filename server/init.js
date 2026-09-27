@@ -44,6 +44,7 @@ export async function initDatabase() {
   }
   await migrateLeaveTimes()
   await ensureLeaveEndDate()
+  await ensureServiceImageUrl()
 }
 
 /**
@@ -65,6 +66,15 @@ async function migrateLeaveTimes() {
       INDEX idx_el_employee_date (employee_id, leave_date)
     )
   `)
+}
+
+/**
+ * 已有项目表补可选图片地址。缺列才加，已有数据和空库都不丢行。
+ */
+async function ensureServiceImageUrl() {
+  const [cols] = await pool.query("SHOW COLUMNS FROM services LIKE 'image_url'")
+  if (cols.length) return
+  await pool.query("ALTER TABLE services ADD COLUMN image_url VARCHAR(512) NOT NULL DEFAULT ''")
 }
 
 /**

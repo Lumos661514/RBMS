@@ -45,7 +45,7 @@ function logout() {
         </RouterLink>
       </nav>
       <div class="client-layout-user">
-        <span>{{ displayName }}</span>
+        <span class="client-layout-name">{{ displayName }}</span>
         <el-button link type="primary" @click="logout">退出</el-button>
       </div>
     </header>
@@ -127,6 +127,42 @@ function logout() {
 
 .client-layout-body {
   flex: 1;
+  min-width: 0;
   padding: var(--page-inset);
+}
+
+@media (max-width: 720px) {
+  .client-layout-bar {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 10px 16px 0;
+    gap: 0 12px;
+  }
+
+  .client-layout-brand {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .client-layout-nav {
+    order: 3;
+    flex: 1 0 100%;
+    height: auto;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .client-layout-link {
+    flex: 1;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  .client-layout-name {
+    display: none;
+  }
+
+  .client-layout-body {
+    padding: 16px;
+  }
 }
 </style>

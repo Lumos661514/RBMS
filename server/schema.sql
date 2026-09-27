@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS services (
   name VARCHAR(64) NOT NULL,
   price DECIMAL(10, 2) NOT NULL,
   duration_hours DECIMAL(4, 2) NOT NULL,
-  description VARCHAR(255) NOT NULL
+  description VARCHAR(255) NOT NULL,
+  image_url VARCHAR(512) NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS employees (

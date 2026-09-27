@@ -27,7 +27,7 @@ A booking admin system for service-type stores. Customers self-serve appointment
 - Source: https://github.com/Lumos661514/RBMS
 - Interview / portfolio demo of full-stack frontend work is a primary evaluation context.
 - Manager workflows center on the schedule board from “today” forward, staff leave within business hours, service catalog CRUD, user search/password/delete, and occupancy/revenue stats.
-- Customer workflows: service intro → pick date/staff/slot → “My” account for password and cancellable upcoming bookings (no cancel inside 30 minutes of start).
+- Customer workflows: service intro → date, staff and slot, then a confirmation summary → “My” account (profile, upcoming bookings, spend, password). Changing one’s own password requires the current password and a matching confirmation. No cancel inside 30 minutes of start.
 
 ## Capabilities and Constraints
 
