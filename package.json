@@ -9,6 +9,7 @@
     "server": "node server/index.js",
     "build": "node -r ./scripts/polyfill-crypto.cjs ./node_modules/vite/bin/vite.js build",
     "preview": "node -r ./scripts/polyfill-crypto.cjs ./node_modules/vite/bin/vite.js preview",
+    "reset:demo": "node scripts/reset-demo.js",
     "test": "vitest run"
   },
   "engines": {

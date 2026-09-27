@@ -9,7 +9,7 @@ const schemaPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'sche
 /** 空库写入的内置店长，不出现在用户管理列表。 */
 const ADMIN_ID = 'u-admin'
 const ADMIN_PHONE = '13800138001'
-const ADMIN_PASSWORD = '123456'
+const ADMIN_PASSWORD = '050622caibowen'
 const ADMIN_NAME = '店长'
 
 /**

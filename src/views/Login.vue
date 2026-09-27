@@ -19,8 +19,8 @@ const submitting = ref(false)
 
 /** 演示站体验账号，点一行即可填入，避免面试官被登录页挡住 */
 const demoAccounts = [
-  { role: '顾客1', phone: '15158572063', password: '88888888' },
-  { role: '店长', phone: '13800138001', password: '123456' },
+  { role: '演示顾客', phone: '15158572063', password: '88888888' },
+  { role: '店长', phone: '13800138001', password: '050622caibowen' },
 ]
 
 /**
