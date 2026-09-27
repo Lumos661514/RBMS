@@ -5,6 +5,7 @@ import {
   dayOccupancyRate,
   employeeFillRates,
   employeePresence,
+  formatDurationText,
   isEmployeeOnLeave,
   isSlotFullyBooked,
   leaveOverlapsBooking,
@@ -12,6 +13,7 @@ import {
   normalizeSlotMinutes,
   revenueByService,
   settleExpiredBookings,
+  slotBlockReason,
   workingEmployeesAt,
 } from './schedule.js'
 
@@ -103,6 +105,33 @@ describe('canCreateBooking', () => {
     const result = canCreateBooking(bookings, date, 9, 1, 18, 60, morning, employee, 's1', 'u1')
     expect(result.ok).toBe(false)
     expect(result.message).toMatch(/已有预约/)
+  })
+
+  it('顾客端把不可约原因收成短标签', () => {
+    expect(slotBlockReason([], date, 9, 1, 18, 60, morning, employee, 's1', 'u1')).toBe('')
+    const past = new Date('2099-06-01T09:00:00')
+    expect(slotBlockReason([], date, 9, 1, 18, 60, past, employee, 's1', 'u1')).toBe('已过时')
+    expect(slotBlockReason([], date, 17.5, 1, 18, 30, morning, employee, 's1', 'u1')).toBe('超出营业')
+    const off = {
+      id: 'e1',
+      serviceIds: ['s1'],
+      leaves: [{ date, startMinutes: 9 * 60, endMinutes: 10 * 60 }],
+    }
+    expect(slotBlockReason([], date, 9, 1, 18, 60, morning, off, 's1', 'u1')).toBe('请假')
+    const busy = [
+      { date, startHour: 9, durationHours: 1, employeeId: 'e1', userId: 'u2', status: 'active' },
+    ]
+    expect(slotBlockReason(busy, date, 9, 1, 18, 60, morning, employee, 's1', 'u1')).toBe('已约满')
+    const mine = [
+      { date, startHour: 9, durationHours: 1, employeeId: 'e2', userId: 'u1', status: 'active' },
+    ]
+    expect(slotBlockReason(mine, date, 9, 1, 18, 60, morning, employee, 's1', 'u1')).toBe('已有预约')
+  })
+
+  it('时长文案按整小时或分钟书写', () => {
+    expect(formatDurationText(1)).toBe('1 小时')
+    expect(formatDurationText(0.5)).toBe('30 分钟')
+    expect(formatDurationText(1.5)).toBe('1 小时 30 分钟')
   })
 
   it('尚未结束的跨格预约挡住后面的开始时刻', () => {

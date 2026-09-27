@@ -8,7 +8,7 @@
 html,
 body {
   margin: 0;
-  min-width: 1000px;
+  min-width: 0;
   /* 值班台：冷纸面 + 石墨轨 + 深青主色；铜只作激活/主按钮 */
   font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
   color: var(--color-text);
@@ -206,6 +206,31 @@ textarea {
 
 .auth-extra-link:hover {
   color: var(--color-accent);
+}
+
+@media (max-width: 860px) {
+  .auth-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-brand {
+    min-height: 0;
+    padding: 28px 24px 24px;
+  }
+
+  .auth-brand h1 {
+    font-size: 32px;
+    max-width: 12ch;
+  }
+
+  .auth-brand-lead {
+    font-size: 15px;
+  }
+
+  .auth-panel {
+    align-items: flex-start;
+    padding: 28px 20px 40px;
+  }
 }
 
 .auth-submit {

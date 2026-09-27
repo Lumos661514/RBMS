@@ -16,12 +16,14 @@ export function getUserDetail(id) {
 }
 
 /**
- * 修改密码；管理员可改普通用户，用户只能改自己。
+ * 修改密码。
+ * 管理员重置普通用户只传新密码；顾客改自己的还要带原密码和确认密码。
  * @param {string} id
  * @param {string} password
+ * @param {{ oldPassword?: string, confirmPassword?: string }} [extra]
  */
-export function updateUserPassword(id, password) {
-  return request.put(`/users/${id}/password`, { password })
+export function updateUserPassword(id, password, extra) {
+  return request.put(`/users/${id}/password`, { password, ...extra })
 }
 
 /**

@@ -9,7 +9,7 @@ export function getServices() {
 
 /**
  * 新增服务；仅管理员。
- * @param {{ name: string, price: number, durationHours: number, description: string }} payload
+ * @param {{ name: string, price: number, durationHours: number, description: string, imageUrl?: string }} payload
  */
 export function createService(payload) {
   return request.post('/services', payload)
@@ -18,7 +18,7 @@ export function createService(payload) {
 /**
  * 修改服务名称、价格、时长、简介；仅管理员。
  * @param {string} id
- * @param {{ name: string, price: number, durationHours: number, description: string }} payload
+ * @param {{ name: string, price: number, durationHours: number, description: string, imageUrl?: string }} payload
  */
 export function updateService(id, payload) {
   return request.put(`/services/${id}`, payload)

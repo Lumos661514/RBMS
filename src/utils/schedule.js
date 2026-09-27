@@ -49,6 +49,18 @@ export function formatClockFromHour(hourFloat) {
 }
 
 /**
+ * 时长展示：整小时、不足一小时、或几小时几分钟。
+ * @param {number} hours
+ */
+export function formatDurationText(hours) {
+  const minutes = Math.round(Number(hours) * 60)
+  if (!Number.isFinite(minutes) || minutes <= 0) return ''
+  if (minutes % 60 === 0) return `${minutes / 60} 小时`
+  if (minutes < 60) return `${minutes} 分钟`
+  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`
+}
+
+/**
  * 把时间段压到合法范围：≥30 且为 30 的倍数。
  * @param {number} [slotMinutes]
  */
@@ -701,4 +713,56 @@ export function canCreateBooking(
     return { ok: false, message: '该用户此时段已有预约' }
   }
   return { ok: true }
+}
+
+/**
+ * 顾客选时段时的短原因。可约返回空字符串。
+ * 规则与 canCreateBooking 相同，只把长句收成格子上放得下的几个字。
+ * @param {object[]} bookings
+ * @param {string} date
+ * @param {number} startHour
+ * @param {number} durationHours
+ * @param {number} [endHour]
+ * @param {number} [slotMinutes]
+ * @param {Date} [now]
+ * @param {{ id: string, serviceIds?: string[], leaves?: object[] } | null} [employee]
+ * @param {string} [serviceId]
+ * @param {string} [userId]
+ * @param {object[]} [leaves]
+ * @returns {'' | '已过时' | '请假' | '已约满' | '已有预约' | '超出营业' | '不可约'}
+ */
+export function slotBlockReason(
+  bookings,
+  date,
+  startHour,
+  durationHours,
+  endHour = END_HOUR,
+  slotMinutes = SLOT_MINUTES_DEFAULT,
+  now = new Date(),
+  employee = null,
+  serviceId = '',
+  userId = '',
+  leaves = [],
+) {
+  const result = canCreateBooking(
+    bookings,
+    date,
+    startHour,
+    durationHours,
+    endHour,
+    slotMinutes,
+    now,
+    employee,
+    serviceId,
+    userId,
+    leaves,
+  )
+  if (result.ok) return ''
+  const message = result.message || ''
+  if (message.includes('已过')) return '已过时'
+  if (message.includes('请假')) return '请假'
+  if (message.includes('已被预约')) return '已约满'
+  if (message.includes('已有预约')) return '已有预约'
+  if (message.includes('营业时间')) return '超出营业'
+  return '不可约'
 }

@@ -153,4 +153,17 @@ async function onSubmit() {
   font-weight: 600;
   color: var(--color-primary);
 }
+
+@media (max-width: 480px) {
+  .login-demo-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-height: 44px;
+  }
+
+  .login-demo-row span:last-child {
+    overflow-wrap: anywhere;
+  }
+}
 </style>

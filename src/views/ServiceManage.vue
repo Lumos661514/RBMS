@@ -2,6 +2,8 @@
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { createService, deleteService, getServices, updateService } from '@/api/services'
+import { formatDurationText } from '@/utils/schedule'
+import { parseServiceImageUrl, serviceDescriptionText } from '@/utils/serviceText'
 
 /** 服务列表 */
 const services = ref([])
@@ -18,19 +20,10 @@ const formName = ref('')
 const formPrice = ref(0)
 /** 表单：时长（小时） */
 const formDuration = ref(0.5)
-/** 表单：简介 */
+/** 表单：简介。空着也可以，顾客端不展示「无」 */
 const formDescription = ref('')
-
-/**
- * 时长展示：支持半小时。
- * @param {number} hours
- */
-function durationText(hours) {
-  const minutes = Math.round(Number(hours) * 60)
-  if (minutes % 60 === 0) return `${minutes / 60} 小时`
-  if (minutes < 60) return `${minutes} 分钟`
-  return `${Math.floor(minutes / 60)} 小时 ${minutes % 60} 分钟`
-}
+/** 表单：可选图片地址 */
+const formImageUrl = ref('')
 
 /** 拉取服务列表。 */
 async function loadServices() {
@@ -53,31 +46,39 @@ function startCreate() {
   formPrice.value = 0
   formDuration.value = 0.5
   formDescription.value = ''
+  formImageUrl.value = ''
   actionError.value = ''
 }
 
 /**
  * 把某条服务填进表单进入编辑。
- * @param {{ id: string, name: string, price: number, durationHours: number, description: string }} item
+ * @param {{ id: string, name: string, price: number, durationHours: number, description: string, imageUrl?: string }} item
  */
 function startEdit(item) {
   editingId.value = item.id
   formName.value = item.name
   formPrice.value = item.price
   formDuration.value = item.durationHours
-  formDescription.value = item.description
+  formDescription.value = serviceDescriptionText(item.description)
+  formImageUrl.value = item.imageUrl || ''
   actionError.value = ''
 }
 
 /** 提交新增或保存修改。 */
 async function onSubmit() {
   actionError.value = ''
+  const image = parseServiceImageUrl(formImageUrl.value)
+  if (!image.ok) {
+    actionError.value = image.message
+    return
+  }
   saving.value = true
   const payload = {
     name: formName.value.trim(),
     price: Number(formPrice.value),
     durationHours: Number(formDuration.value),
-    description: formDescription.value.trim(),
+    description: serviceDescriptionText(formDescription.value),
+    imageUrl: image.imageUrl,
   }
   try {
     if (editingId.value) {
@@ -154,7 +155,7 @@ onMounted(() => {
             @click="startEdit(item)"
           >
             <span class="desk-list-title">{{ item.name }}</span>
-            <span class="desk-list-meta">¥{{ item.price }} · {{ durationText(item.durationHours) }}</span>
+            <span class="desk-list-meta">¥{{ item.price }} · {{ formatDurationText(item.durationHours) }}</span>
           </button>
         </li>
       </ul>
@@ -171,8 +172,15 @@ onMounted(() => {
           <el-form-item label="时长（小时，最低 0.5，步进 0.5）">
             <el-input-number v-model="formDuration" :min="0.5" :step="0.5" />
           </el-form-item>
-          <el-form-item label="简单介绍">
-            <el-input v-model="formDescription" type="textarea" :rows="3" />
+          <el-form-item label="简单介绍（可留空）">
+            <el-input v-model="formDescription" type="textarea" :rows="3" placeholder="留空则顾客端不展示简介" />
+          </el-form-item>
+          <el-form-item label="图片地址（可选）">
+            <el-input
+              v-model="formImageUrl"
+              maxlength="500"
+              placeholder="https:// 开头的图片链接"
+            />
           </el-form-item>
           <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
           <div class="desk-actions">
@@ -192,5 +200,10 @@ onMounted(() => {
 /* 右侧表单限宽，避免整栏被拉得很空 */
 .service-manage-form {
   max-width: 440px;
+}
+
+.service-manage-form :deep(.el-input),
+.service-manage-form :deep(.el-textarea) {
+  width: 100%;
 }
 </style>
