@@ -38,7 +38,8 @@ const router = createRouter({
       children: [
         { path: 'board', component: ScheduleBoard },
         { path: 'users', component: UserManage },
-        { path: 'services', component: ServiceIntro },
+        // 旧管理端「项目介绍」入口已去掉，书签落到项目管理
+        { path: 'services', redirect: '/service-manage' },
         {
           path: 'service-manage',
           component: ServiceManage,

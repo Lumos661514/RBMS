@@ -130,24 +130,36 @@ onMounted(() => {
 
 <template>
   <div class="service-manage">
-    <h2 class="service-manage-title">项目管理</h2>
-    <p class="service-manage-hint">可新增、修改或删除服务；时长须为当前时间格的整数倍。变更会同步到项目介绍与预约。已产生的预约记录仍保留当时的项目名称。</p>
+    <h2 class="page-title">项目管理</h2>
+    <p class="page-hint">可新增、修改或删除服务；时长须为当前时间格的整数倍。变更会同步到顾客端项目页与预约。已产生的预约记录仍保留当时的项目名称。</p>
 
     <el-skeleton v-if="loading" :rows="4" animated />
-    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
+    <div v-else-if="loadError" class="page-load-error">
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadServices">重试</el-button>
+    </div>
 
-    <div v-else class="service-manage-body">
-      <el-menu class="service-manage-list" :default-active="editingId">
-        <el-menu-item v-if="!services.length" index="empty" disabled>暂无服务</el-menu-item>
-        <el-menu-item v-for="item in services" :key="item.id" :index="item.id" @click="startEdit(item)">
-          <span>
-            <strong>{{ item.name }}</strong>
-            <em>¥{{ item.price }} · {{ durationText(item.durationHours) }}</em>
-          </span>
-        </el-menu-item>
-      </el-menu>
+    <div v-else class="desk-split">
+      <ul class="desk-list" role="listbox" aria-label="服务列表">
+        <li v-if="!services.length">
+          <button type="button" class="desk-list-item" disabled>暂无服务</button>
+        </li>
+        <li v-for="item in services" :key="item.id">
+          <button
+            type="button"
+            class="desk-list-item"
+            :class="{ 'is-active': editingId === item.id }"
+            role="option"
+            :aria-selected="editingId === item.id"
+            @click="startEdit(item)"
+          >
+            <span class="desk-list-title">{{ item.name }}</span>
+            <span class="desk-list-meta">¥{{ item.price }} · {{ durationText(item.durationHours) }}</span>
+          </button>
+        </li>
+      </ul>
 
-      <el-card class="service-manage-form" shadow="never">
+      <section class="desk-panel service-manage-form">
         <h3>{{ editingId ? '编辑服务' : '新增服务' }}</h3>
         <el-form label-position="top" @submit.prevent="onSubmit">
           <el-form-item label="名称">
@@ -163,7 +175,7 @@ onMounted(() => {
             <el-input v-model="formDescription" type="textarea" :rows="3" />
           </el-form-item>
           <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
-          <div class="service-manage-actions">
+          <div class="desk-actions">
             <el-button type="primary" native-type="submit" :loading="saving">
               {{ editingId ? '保存修改' : '添加服务' }}
             </el-button>
@@ -171,89 +183,14 @@ onMounted(() => {
             <el-button v-if="editingId" type="danger" :loading="saving" @click="onDelete">删除项目</el-button>
           </div>
         </el-form>
-      </el-card>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 项目管理：左侧列表 + 右侧表单 */
-.service-manage-title {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
-
-.service-manage-hint {
-  margin: 0 0 16px;
-  color: #616e7c;
-  font-size: 13px;
-}
-
-.service-manage-body {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.service-manage-list {
-  width: 260px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-right: none;
-}
-
-/* 菜单项默认 56px 行高，会把名称顶出格子；改为随两行文案撑开 */
-.service-manage-list :deep(.el-menu-item) {
-  height: auto;
-  line-height: 1.4;
-  /* 组件默认不换行，长名称会撑出列宽盖住表单 */
-  white-space: normal !important;
-  overflow: hidden;
-  align-items: flex-start;
-  padding: 10px 16px;
-}
-
-/* 长名称默认把格子撑宽，会盖住右侧表单；限制在列宽内换行 */
-.service-manage-list :deep(.el-menu-item span) {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-/* 选中的项目用底色标出，只改字色不够明显 */
-.service-manage-list :deep(.el-menu-item.is-active) {
-  background: #e7eef5;
-}
-
-.service-manage-list strong {
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.service-manage-list em {
-  display: block;
-  font-style: normal;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #7b8794;
-  overflow-wrap: anywhere;
-}
-
+/* 右侧表单限宽，避免整栏被拉得很空 */
 .service-manage-form {
-  flex: 1;
-  max-width: 420px;
-}
-
-.service-manage-form h3 {
-  margin: 0 0 12px;
-  font-size: 15px;
-}
-
-.service-manage-actions {
-  display: flex;
-  gap: 8px;
+  max-width: 440px;
 }
 </style>

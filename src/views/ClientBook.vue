@@ -253,20 +253,28 @@ onMounted(loadPage)
 
 <template>
   <div class="client-book">
-    <h2 class="client-book-title">预约</h2>
-    <p class="client-book-hint">请选择日期、员工和时段。</p>
+    <h2 class="page-title">预约</h2>
+    <p class="page-hint">请选择日期、员工和时段。</p>
 
     <el-skeleton v-if="loading" :rows="6" animated />
-    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
+    <div v-else-if="loadError" class="page-load-error">
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadPage">重试</el-button>
+    </div>
 
     <template v-else>
-      <el-steps :active="step" finish-status="success" align-center>
-        <el-step title="选日期" @click="goStep(0)" />
-        <el-step title="选员工" @click="goStep(1)" />
-      </el-steps>
+      <!-- 文字步骤条，替代 el-steps 默认进度条观感 -->
+      <ol class="client-book-steps">
+        <li :class="{ 'is-active': step === 0, 'is-done': step > 0 }">
+          <button type="button" @click="goStep(0)">选日期</button>
+        </li>
+        <li :class="{ 'is-active': step === 1 }">
+          <button type="button" @click="goStep(1)">员工与时段</button>
+        </li>
+      </ol>
 
       <!-- 第一步：可约日期；换项目回介绍页 -->
-      <section v-if="step === 0" class="client-book-section">
+      <section v-if="step === 0" class="desk-section client-book-section">
         <p class="client-book-picked">项目：{{ selectedService ? selectedService.name : '' }}</p>
         <el-empty
           v-if="!bookableDates.length"
@@ -277,62 +285,62 @@ onMounted(loadPage)
           "
         />
         <div v-else class="client-book-dates">
-          <!-- 每个按钮单独包一层，避免 EP 相邻左边距在换行后错位 -->
-          <span v-for="col in bookableDates" :key="col.date">
-            <el-button
-              :type="selectedDate === col.date ? 'primary' : 'default'"
-              @click="pickDate(col.date)"
-            >
-              {{ col.label }} {{ col.dateLabel }}
-            </el-button>
-          </span>
+          <button
+            v-for="col in bookableDates"
+            :key="col.date"
+            type="button"
+            class="client-book-chip"
+            :class="{ 'is-active': selectedDate === col.date }"
+            @click="pickDate(col.date)"
+          >
+            {{ col.label }} {{ col.dateLabel }}
+          </button>
         </div>
         <el-button class="client-book-back" @click="goCatalog">上一步</el-button>
       </section>
 
       <!-- 第二步：员工与时段 -->
-      <section v-else class="client-book-section">
+      <section v-else class="desk-section client-book-section">
         <p class="client-book-picked">
           {{ selectedService ? selectedService.name : '' }}
           · {{ selectedDate }}
         </p>
         <el-empty v-if="!bookableEmployees.length" description="当天没有可约员工" />
         <div v-else class="client-book-people">
-          <el-card
+          <button
             v-for="item in bookableEmployees"
             :key="item.id"
-            class="client-book-option"
+            type="button"
+            class="client-book-person"
             :class="{ 'is-active': employeeId === item.id }"
-            shadow="never"
             @click="pickEmployee(item.id)"
           >
-            <h3>{{ item.name }}</h3>
-          </el-card>
+            {{ item.name }}
+          </button>
         </div>
         <!-- 选人后再列可约开始时刻 -->
         <template v-if="employeeId">
-          <h3 class="client-book-sub">选择时段</h3>
+          <h3 class="desk-section-title">选择时段</h3>
           <el-empty v-if="!bookableHours.length" description="该员工当天已约满" />
           <div v-else class="client-book-hours">
-            <!-- 每个按钮单独包一层，避免 EP 相邻左边距在换行后错位 -->
-            <span v-for="hour in bookableHours" :key="hour">
-              <el-button
-                :type="startHour === hour ? 'primary' : 'default'"
-                @click="startHour = hour"
-              >
-                {{ formatClockFromHour(hour) }}–
-                {{
-                  formatClockFromHour(
-                    hour + (selectedService ? selectedService.durationHours : 0),
-                  )
-                }}
-              </el-button>
-            </span>
+            <button
+              v-for="hour in bookableHours"
+              :key="hour"
+              type="button"
+              class="client-book-chip"
+              :class="{ 'is-active': startHour === hour }"
+              @click="startHour = hour"
+            >
+              {{ formatClockFromHour(hour) }}–
+              {{
+                formatClockFromHour(hour + (selectedService ? selectedService.durationHours : 0))
+              }}
+            </button>
           </div>
           <el-input v-model="remark" class="client-book-remark" placeholder="备注（可选）" />
         </template>
         <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
-        <div class="client-book-actions">
+        <div class="desk-actions client-book-actions">
           <el-button @click="goStep(0)">上一步</el-button>
           <el-button
             type="primary"
@@ -349,65 +357,92 @@ onMounted(loadPage)
 </template>
 
 <style scoped>
-/* 顾客预约：日期 → 员工与时段 */
+/* 顾客预约：值班台步骤 + 可选芯片 */
 .client-book {
   max-width: 720px;
 }
 
-.client-book-title {
-  margin: 0 0 8px;
-  font-size: 20px;
+.client-book-steps {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
 }
 
-.client-book-hint,
+.client-book-steps li button {
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.client-book-steps li.is-done button {
+  color: var(--color-primary);
+  border-color: color-mix(in srgb, var(--color-primary) 35%, var(--color-border));
+}
+
+.client-book-steps li.is-active button {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+  font-weight: 600;
+}
+
 .client-book-picked {
   margin: 0 0 16px;
-  color: #616e7c;
+  color: var(--color-text-subtle);
   font-size: 13px;
 }
 
 .client-book-section {
-  margin-top: 24px;
+  margin-top: 0;
 }
 
-.client-book-option {
-  margin-bottom: 16px;
+.client-book-chip,
+.client-book-person {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
   cursor: pointer;
+  transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 
-.client-book-option.is-active {
-  outline: 2px solid #1f4e79;
+.client-book-chip:hover,
+.client-book-person:hover {
+  border-color: var(--color-primary);
 }
 
-.client-book-option h3 {
-  margin: 0;
-  font-size: 16px;
+.client-book-chip.is-active,
+.client-book-person.is-active {
+  background: var(--color-list-active);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
 }
 
 .client-book-hours,
-.client-book-people {
+.client-book-dates {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
 }
 
-/* 按约 108px 分列，7 天在内容区会换行且左缘对齐 */
-.client-book-dates {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(108px, auto));
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
 .client-book-people {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-}
-
-.client-book-sub {
-  margin: 8px 0 12px;
-  font-size: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
 }
 
 .client-book-remark {
@@ -415,13 +450,11 @@ onMounted(loadPage)
   margin-bottom: 12px;
 }
 
-.client-book-back,
-.client-book-actions {
-  margin-top: 8px;
+.client-book-back {
+  margin-top: 4px;
 }
 
 .client-book-actions {
-  display: flex;
-  gap: 8px;
+  margin-top: 8px;
 }
 </style>

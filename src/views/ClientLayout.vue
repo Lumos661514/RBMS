@@ -1,6 +1,6 @@
 <script setup>
 import { computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute, useRouter, RouterLink } from 'vue-router'
 import { NAME_KEY, clearSession } from '@/api/request'
 
 const route = useRoute()
@@ -22,78 +22,111 @@ function logout() {
 
 <template>
   <div class="client-layout">
-    <el-header class="client-layout-bar">
-      <div class="client-layout-brand">门店预约系统</div>
-      <el-menu
-        class="client-layout-nav"
-        mode="horizontal"
-        :router="true"
-        :default-active="menuActive"
-      >
-        <el-menu-item index="/book">项目</el-menu-item>
-        <el-menu-item index="/book/account">我的</el-menu-item>
-      </el-menu>
+    <!-- 顾客端浅色顶栏，与管理端石墨轨区分门户 -->
+    <header class="client-layout-bar">
+      <div class="client-layout-brand">
+        <span class="client-layout-brand-mark" aria-hidden="true" />
+        门店预约系统
+      </div>
+      <nav class="client-layout-nav" aria-label="顾客端菜单">
+        <RouterLink
+          to="/book"
+          class="client-layout-link"
+          :class="{ 'is-active': menuActive === '/book' }"
+        >
+          项目
+        </RouterLink>
+        <RouterLink
+          to="/book/account"
+          class="client-layout-link"
+          :class="{ 'is-active': menuActive === '/book/account' }"
+        >
+          我的
+        </RouterLink>
+      </nav>
       <div class="client-layout-user">
         <span>{{ displayName }}</span>
         <el-button link type="primary" @click="logout">退出</el-button>
       </div>
-    </el-header>
-    <el-main class="client-layout-body">
+    </header>
+    <main class="client-layout-body">
       <router-view />
-    </el-main>
+    </main>
   </div>
 </template>
 
 <style scoped>
-/* 顾客端：顶栏导航，和左侧后台壳区分 */
 .client-layout {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
+  background: var(--color-bg);
 }
 
 .client-layout-bar {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 20px;
   height: 64px;
-  padding: 0 28px;
-  background: #eef1f4;
-  border-bottom: 1px solid #d9dee3;
+  padding: 0 24px;
+  background: var(--color-surface);
+  border-bottom: 1px solid var(--color-border);
 }
 
 .client-layout-brand {
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 15px;
   font-weight: 600;
-  letter-spacing: -0.03em;
-  color: #1c2430;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
   flex-shrink: 0;
 }
 
-.client-layout-nav {
-  flex: 1;
-  border-bottom: none;
-  background: transparent;
-  --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: transparent;
+.client-layout-brand-mark {
+  width: 18px;
+  height: 3px;
+  background: var(--color-accent);
 }
 
-/* 顶栏当前项用底边标出，避免和未选中项一样 */
-.client-layout-nav :deep(.el-menu-item.is-active) {
-  color: #1f4e79 !important;
-  border-bottom-color: #1f4e79 !important;
-  background: transparent !important;
+.client-layout-nav {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  flex: 1;
+  height: 100%;
+}
+
+.client-layout-link {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+
+.client-layout-link:hover {
+  color: var(--color-text);
+}
+
+.client-layout-link.is-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-accent);
+  font-weight: 600;
 }
 
 .client-layout-user {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #52606d;
+  color: var(--color-text-muted);
 }
 
 .client-layout-body {
   flex: 1;
-  background: #eef1f4;
+  padding: var(--page-inset);
 }
 </style>

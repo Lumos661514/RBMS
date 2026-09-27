@@ -104,33 +104,38 @@ onMounted(loadStats)
 
 <template>
   <div class="ops-stats">
-    <h2 class="ops-stats-title">占用与营收</h2>
-    <p class="ops-stats-hint">
+    <h2 class="page-title">占用与营收</h2>
+    <p class="page-hint">
       占用和饱和度按当前看板列数，只算尚未结束的预约。营收累计全部已到开始时刻的预约。请假重叠的格子不计入该员工容量。
     </p>
 
     <el-skeleton v-if="loading" :rows="6" animated />
     <!-- 拉数失败时不渲染空表 -->
-    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
+    <div v-else-if="loadError" class="page-load-error">
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadStats">重试</el-button>
+    </div>
 
-    <div v-else class="ops-stats-body">
-      <section>
-        <h3>每日占用率</h3>
-        <el-table :data="occupancyRows" stripe>
+    <div v-else class="desk-stack">
+      <section class="desk-section">
+        <h3 class="desk-section-title">每日占用率</h3>
+        <el-table class="desk-table" :data="occupancyRows">
           <el-table-column prop="label" label="日期" />
           <el-table-column label="最多在岗">
             <template #default="{ row }">{{ row.working }} 人</template>
           </el-table-column>
           <el-table-column label="占用率">
-            <template #default="{ row }">{{ percentText(row.rate) }}</template>
+            <template #default="{ row }">
+              <span class="ops-stats-rate">{{ percentText(row.rate) }}</span>
+            </template>
           </el-table-column>
         </el-table>
       </section>
 
-      <section>
-        <h3>项目营收（合计 {{ moneyText(totalRevenue) }}）</h3>
+      <section class="desk-section">
+        <h3 class="desk-section-title">项目营收（合计 {{ moneyText(totalRevenue) }}）</h3>
         <!-- 有预约时按项目汇总，否则空表提示 -->
-        <el-table :data="serviceRevenue" stripe empty-text="暂无已结算预约">
+        <el-table class="desk-table" :data="serviceRevenue" empty-text="暂无已结算预约">
           <el-table-column prop="name" label="项目" />
           <el-table-column label="营收">
             <template #default="{ row }">{{ moneyText(row.total) }}</template>
@@ -138,16 +143,18 @@ onMounted(loadStats)
         </el-table>
       </section>
 
-      <section>
-        <h3>员工饱和度</h3>
+      <section class="desk-section">
+        <h3 class="desk-section-title">员工饱和度</h3>
         <!-- 按可上班格子算饱和度 -->
-        <el-table :data="fillRows" stripe empty-text="暂无员工">
+        <el-table class="desk-table" :data="fillRows" empty-text="暂无员工">
           <el-table-column prop="name" label="员工" />
           <el-table-column label="已占格 / 可上班格">
             <template #default="{ row }">{{ row.used }} / {{ row.capacity }}</template>
           </el-table-column>
           <el-table-column label="饱和度">
-            <template #default="{ row }">{{ percentText(row.rate) }}</template>
+            <template #default="{ row }">
+              <span class="ops-stats-rate">{{ percentText(row.rate) }}</span>
+            </template>
           </el-table-column>
         </el-table>
       </section>
@@ -156,27 +163,10 @@ onMounted(loadStats)
 </template>
 
 <style scoped>
-/* 占用与营收：三块表，风格跟设置页一致 */
-.ops-stats-title {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
-
-.ops-stats-hint {
-  margin: 0 0 16px;
-  color: #616e7c;
-  font-size: 13px;
-}
-
-.ops-stats-body {
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  max-width: 720px;
-}
-
-.ops-stats-body h3 {
-  margin: 0 0 8px;
-  font-size: 15px;
+/* 占用与营收：账本分节；比率用主色强调 */
+.ops-stats-rate {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--color-primary);
 }
 </style>

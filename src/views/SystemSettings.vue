@@ -22,12 +22,15 @@ const slotMinutes = ref(SLOT_MINUTES_DEFAULT)
 const SLOT_OPTIONS = [30, 60, 90, 120]
 const loading = ref(false)
 const saving = ref(false)
-const errorText = ref('')
+/** 首屏拉取失败；与保存错误分开，避免失败时仍露出默认可保存表单 */
+const loadError = ref('')
+/** 保存接口失败文案 */
+const saveError = ref('')
 
 /** 打开页时带回当前营业设置。 */
 async function loadSettings() {
   loading.value = true
-  errorText.value = ''
+  loadError.value = ''
   try {
     const data = await getSettings()
     startHour.value = data.startHour
@@ -35,7 +38,7 @@ async function loadSettings() {
     dayCount.value = data.dayCount ?? DAY_COUNT_DEFAULT
     slotMinutes.value = data.slotMinutes ?? SLOT_MINUTES_DEFAULT
   } catch (error) {
-    errorText.value = error.message || '加载失败'
+    loadError.value = error.message || '加载失败'
   } finally {
     loading.value = false
   }
@@ -45,7 +48,7 @@ async function loadSettings() {
  * 保存营业时段、看板列数与时间段；看板下次加载会按新设置画表。
  */
 async function onSave() {
-  errorText.value = ''
+  saveError.value = ''
   saving.value = true
   try {
     const data = await updateSettings({
@@ -60,7 +63,7 @@ async function onSave() {
     slotMinutes.value = data.slotMinutes
     ElMessage.success('已保存')
   } catch (error) {
-    errorText.value = error.message || '保存失败'
+    saveError.value = error.message || '保存失败'
   } finally {
     saving.value = false
   }
@@ -71,12 +74,15 @@ onMounted(loadSettings)
 
 <template>
   <div class="system-settings">
-    <h2 class="system-settings-title">系统设置</h2>
-    <p class="system-settings-hint">修改后回到预约看板即可看到新的行列。</p>
-    <!-- 加载失败 -->
-    <el-alert v-if="errorText" :title="errorText" type="error" :closable="false" show-icon />
-    <el-skeleton v-if="loading" :rows="4" animated />
-    <el-card v-else class="system-settings-form" shadow="never">
+    <h2 class="page-title">系统设置</h2>
+    <p class="page-hint">修改后回到预约看板即可看到新的行列。</p>
+    <!-- 加载失败：不渲染默认可编辑表单，避免误保存 -->
+    <div v-if="loadError" class="page-load-error">
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadSettings">重试</el-button>
+    </div>
+    <el-skeleton v-else-if="loading" :rows="4" animated />
+    <section v-else class="desk-panel-solo">
       <el-form label-position="top" @submit.prevent="onSave">
         <el-form-item label="开始整点">
           <el-input-number v-model="startHour" :min="0" :max="23" />
@@ -92,26 +98,11 @@ onMounted(loadSettings)
         <el-form-item :label="`看板列数（从今日起，最少 ${DAY_COUNT_MIN}）`">
           <el-input-number v-model="dayCount" :min="DAY_COUNT_MIN" :step="1" />
         </el-form-item>
-        <el-button type="primary" native-type="submit" :loading="saving">保存</el-button>
+        <el-alert v-if="saveError" :title="saveError" type="error" :closable="false" show-icon />
+        <div class="desk-actions">
+          <el-button type="primary" native-type="submit" :loading="saving">保存</el-button>
+        </div>
       </el-form>
-    </el-card>
+    </section>
   </div>
 </template>
-
-<style scoped>
-/* 系统设置：营业时段、时间段与看板列数 */
-.system-settings-title {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
-
-.system-settings-hint {
-  margin: 0 0 16px;
-  font-size: 13px;
-  color: #616e7c;
-}
-
-.system-settings-form {
-  max-width: 420px;
-}
-</style>

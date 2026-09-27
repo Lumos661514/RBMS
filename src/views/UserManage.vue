@@ -294,31 +294,56 @@ onMounted(loadPage)
 
 <template>
   <div class="user-manage">
-    <h2 class="user-manage-title">{{ isAdmin ? '用户管理' : '个人信息' }}</h2>
+    <h2 class="page-title">{{ isAdmin ? '用户管理' : '个人信息' }}</h2>
+    <p class="page-hint">
+      {{
+        isAdmin
+          ? '搜索并选择左侧用户，可查看预约、改密或删除账号。'
+          : '查看进行中的预约与消费记录，也可修改登录密码。'
+      }}
+    </p>
     <!-- 加载或接口失败 -->
     <el-skeleton v-if="loading" :rows="4" animated />
-    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
+    <div v-else-if="loadError" class="page-load-error">
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadPage">重试</el-button>
+    </div>
 
-    <div v-else class="user-manage-body">
+    <div v-else :class="isAdmin ? 'desk-split' : 'user-manage-solo'">
       <!-- 管理员：左侧普通用户列表 + 搜索 -->
       <div v-if="isAdmin" class="user-manage-aside">
-        <el-input v-model="keyword" clearable placeholder="搜索手机号或姓名" />
-        <el-menu class="user-manage-list" :default-active="detailUser ? detailUser.id : ''">
-          <el-menu-item v-if="emptyAdminList" index="empty" disabled>暂无普通用户</el-menu-item>
-          <el-menu-item v-else-if="emptySearchResult" index="empty" disabled>无匹配用户</el-menu-item>
-          <el-menu-item
-            v-for="item in pagedUsers"
-            :key="item.id"
-            :index="item.id"
-            @click="selectUser(item.id)"
-          >
-            {{ item.name }} · {{ item.phone }}
-          </el-menu-item>
-        </el-menu>
+        <el-input
+          v-model="keyword"
+          class="user-manage-search"
+          clearable
+          placeholder="搜索手机号或姓名"
+        />
+        <ul class="desk-list user-manage-list" role="listbox" aria-label="用户列表">
+          <li v-if="emptyAdminList">
+            <button type="button" class="desk-list-item" disabled>暂无普通用户</button>
+          </li>
+          <li v-else-if="emptySearchResult">
+            <button type="button" class="desk-list-item" disabled>无匹配用户</button>
+          </li>
+          <li v-for="item in pagedUsers" :key="item.id">
+            <button
+              type="button"
+              class="desk-list-item"
+              :class="{ 'is-active': detailUser && detailUser.id === item.id }"
+              role="option"
+              :aria-selected="!!(detailUser && detailUser.id === item.id)"
+              @click="selectUser(item.id)"
+            >
+              <span class="desk-list-title">{{ item.name }}</span>
+              <span class="desk-list-meta">{{ item.phone }}</span>
+            </button>
+          </li>
+        </ul>
         <!-- 超过一页才显示翻页 -->
         <el-pagination
           v-if="showPager"
           v-model:current-page="currentPage"
+          class="user-manage-pager"
           :page-size="PAGE_SIZE"
           :total="filteredUsers.length"
           layout="prev, pager, next"
@@ -326,14 +351,13 @@ onMounted(loadPage)
         />
       </div>
 
-      <el-card v-if="detailUser" class="user-manage-detail" shadow="never">
-        <p>姓名：{{ detailUser.name }}</p>
-        <p>手机号：{{ detailUser.phone }}</p>
+      <section v-if="detailUser" class="desk-panel user-manage-detail">
+        <p class="user-manage-field">姓名：{{ detailUser.name }}</p>
+        <p class="user-manage-field">手机号：{{ detailUser.phone }}</p>
         <!-- 管理员仍看该用户全部预约合计；顾客总计只来自到点后的消费记录 -->
-        <p v-if="isAdmin">总计消费：¥{{ totalSpend }}</p>
+        <p v-if="isAdmin" class="user-manage-field">总计消费：¥{{ totalSpend }}</p>
         <template v-if="isAdmin">
-          <h3>预约记录</h3>
-          <!-- 没有预约时给空态 -->
+          <h3 class="desk-section-title">预约记录</h3>
           <el-empty v-if="!detailBookings.length" description="暂无预约" :image-size="64" />
           <template v-else>
             <ul class="user-manage-bookings">
@@ -350,14 +374,13 @@ onMounted(loadPage)
           </template>
         </template>
         <template v-else>
-          <h3>我的预约</h3>
+          <h3 class="desk-section-title">我的预约</h3>
           <el-empty v-if="!upcomingBookings.length" description="暂无进行中的预约" :image-size="64" />
           <div v-else class="user-manage-upcoming">
-            <el-card
+            <article
               v-for="item in upcomingBookings"
               :key="item.id"
-              class="user-manage-upcoming-item"
-              shadow="never"
+              class="desk-row user-manage-upcoming-item"
             >
               <p>项目：{{ item.serviceName }}</p>
               <p v-if="item.employeeName">员工：{{ item.employeeName }}</p>
@@ -379,10 +402,10 @@ onMounted(loadPage)
                 取消预约
               </el-button>
               <p v-else class="user-manage-lock">开约前 30 分钟内不可取消</p>
-            </el-card>
+            </article>
           </div>
-          <h3>消费记录</h3>
-          <p>总计消费：¥{{ totalSpend }}</p>
+          <h3 class="desk-section-title">消费记录</h3>
+          <p class="user-manage-field">总计消费：¥{{ totalSpend }}</p>
           <el-empty v-if="!spendBookings.length" description="暂无消费记录" :image-size="64" />
           <template v-else>
             <ul class="user-manage-bookings">
@@ -409,81 +432,92 @@ onMounted(loadPage)
           </el-form-item>
         </el-form>
         <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
-        <div class="user-manage-actions">
+        <div class="desk-actions">
           <el-button type="primary" :loading="saving" @click="onSavePassword">保存密码</el-button>
           <!-- 仅管理员能删除普通用户 -->
           <el-button v-if="isAdmin" type="danger" :loading="saving" @click="onDeleteUser">
             删除账号
           </el-button>
         </div>
-      </el-card>
+      </section>
+      <!-- 管理员未选用户时给右侧空态，避免空白主栏 -->
+      <div v-else-if="isAdmin" class="desk-panel user-manage-empty">
+        <el-empty
+          :description="emptyAdminList ? '暂无普通用户' : '请选择左侧用户'"
+          :image-size="72"
+        />
+      </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 用户管理：管理员左右栏，普通用户只看详情 */
-.user-manage-title {
-  margin: 0 0 16px;
-  font-size: 20px;
+/* 用户管理：值班台分栏；顾客端单独面板 */
+.user-manage-solo {
+  max-width: 560px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  overflow: hidden;
 }
 
-.user-manage-body {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-/* 左侧：搜索 + 用户列表 */
 .user-manage-aside {
-  width: 260px;
-  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  width: var(--admin-list-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg) 55%, var(--color-surface));
+}
+
+.user-manage-search {
+  padding: 10px 8px 0;
 }
 
 .user-manage-list {
+  width: 100%;
   border-right: none;
-}
-
-.user-manage-detail {
+  background: transparent;
   flex: 1;
 }
 
-.user-manage-detail h3 {
-  margin: 8px 0 0;
-  font-size: 15px;
+.user-manage-pager {
+  padding: 8px;
+  justify-content: center;
+}
+
+.user-manage-field {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.user-manage-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .user-manage-bookings {
   margin: 0 0 8px;
   padding-left: 18px;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .user-manage-upcoming {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
 .user-manage-upcoming-item p {
-  margin: 0 0 4px;
-  font-size: 13px;
+  margin: 0;
 }
 
 .user-manage-lock {
-  color: #7b8794;
+  color: var(--color-text-subtle);
 }
 
 .user-manage-password {
   max-width: 280px;
-  margin-top: 8px;
-}
-
-.user-manage-actions {
-  display: flex;
-  gap: 8px;
+  margin-top: 12px;
 }
 </style>

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { NAME_KEY, ROLE_KEY, USER_ID_KEY } from '@/api/request'
 import { getSettings } from '@/api/settings'
@@ -408,7 +409,8 @@ onUnmounted(() => {
 
 <template>
   <div class="board-page">
-    <p class="board-sub">
+    <h2 class="page-title">预约看板</h2>
+    <p class="page-hint board-sub">
       营业 {{ formatClockFromHour(settings.startHour) }}–{{ formatClockFromHour(settings.endHour) }}
       ｜ 每格 {{ settings.slotMinutes || SLOT_MINUTES_DEFAULT }} 分钟
       ｜ 员工 {{ employeeOptions.length }} 人（容量按各格可上班人数，请假时段不计入）
@@ -418,14 +420,28 @@ onUnmounted(() => {
     </p>
 
     <!-- 列表加载失败时保留重试，不渲染空表造成「没有班次」的误解 -->
-    <div v-if="loadError" class="board-status">
+    <div v-if="loadError" class="page-load-error">
       <el-alert :title="loadError" type="error" :closable="false" show-icon />
       <el-button type="primary" @click="loadBoard">重试</el-button>
     </div>
     <!-- 首屏等待设置和预约 -->
     <el-skeleton v-else-if="loading" :rows="6" animated />
 
-    <div v-else class="board-table-wrap">
+    <template v-else>
+      <!-- 无员工时表格格子全空，先提示去建档 -->
+      <el-alert
+        v-if="isAdmin && !employeeOptions.length"
+        class="board-empty-staff"
+        type="warning"
+        :closable="false"
+        show-icon
+      >
+        <template #title>
+          尚未添加员工。
+          <RouterLink class="board-empty-link" to="/employees">去员工管理</RouterLink>
+        </template>
+      </el-alert>
+      <div class="board-table-wrap">
       <table class="board-table">
         <thead>
           <tr>
@@ -466,6 +482,7 @@ onUnmounted(() => {
         </tbody>
       </table>
     </div>
+    </template>
 
     <BookingCreateDialog
       v-if="createOpen"
@@ -515,26 +532,23 @@ onUnmounted(() => {
 }
 
 .board-sub {
-  margin: 0 0 12px;
-  color: #616e7c;
+  margin-bottom: 12px;
+}
+
+.board-empty-staff {
+  margin-bottom: 12px;
+}
+
+.board-empty-link {
+  color: var(--color-primary);
   font-size: 13px;
-}
-
-.board-status {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.board-status button {
-  cursor: pointer;
 }
 
 .board-table-wrap {
   overflow-x: auto;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
 }
 
 .board-table {
@@ -546,7 +560,7 @@ onUnmounted(() => {
 
 .board-table th,
 .board-table td {
-  border: 1px solid #e4e7eb;
+  border: 1px solid var(--color-border);
   padding: 8px 6px;
   text-align: center;
   vertical-align: middle;
@@ -555,56 +569,57 @@ onUnmounted(() => {
 
 .board-time-col {
   width: 120px;
-  background: #f8fafc;
+  background: color-mix(in srgb, var(--color-bg) 70%, #fff);
+  font-variant-numeric: tabular-nums;
 }
 
 .board-date {
   display: block;
   font-weight: 400;
-  color: #7b8794;
+  color: var(--color-text-subtle);
   font-size: 12px;
 }
 
 .is-free {
   cursor: pointer;
-  color: #9aa5b1;
-  background: #fff;
+  color: var(--color-text-subtle);
+  background: var(--color-surface);
 }
 
 .is-free:hover {
-  background: #e6f2ff;
-  color: #1f4e79;
+  background: var(--color-list-active);
+  color: var(--color-primary);
 }
 
 /* 已约部分员工，仍可继续约 */
 .is-partial {
   cursor: pointer;
-  background: #fff7e6;
-  color: #ad6800;
+  background: color-mix(in srgb, var(--color-accent) 14%, #fff);
+  color: #8a3d14;
   font-size: 12px;
 }
 
 /* 全体员工已满 */
 .is-full {
   cursor: pointer;
-  background: #fde8e8;
-  color: #9b1c1c;
+  background: #f3e4e4;
+  color: #8a1f1f;
   font-size: 12px;
 }
 
 /* 该格全员请假 */
 .is-off {
   cursor: not-allowed;
-  color: #7b8794;
-  background: #eef2f6;
+  color: var(--color-text-subtle);
+  background: var(--color-bg);
   font-size: 12px;
 }
 
 /* 已过点的空闲格：不可约 */
 .is-past {
   cursor: not-allowed;
-  color: #9aa5b1;
-  background: #f5f7fa;
+  color: var(--color-text-subtle);
+  background: color-mix(in srgb, var(--color-bg) 80%, #fff);
   font-size: 12px;
 }
 

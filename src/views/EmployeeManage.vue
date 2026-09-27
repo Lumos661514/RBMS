@@ -388,27 +388,39 @@ onUnmounted(() => {
 
 <template>
   <div class="employee-manage">
-    <h2 class="employee-manage-title">员工管理</h2>
-    <p class="employee-manage-hint">
+    <h2 class="page-title">员工管理</h2>
+    <p class="page-hint">
       为员工配置可做项目，并按营业时间内的时段请假。已有预约的时段不能请假，请假重叠的格子不计入容量。删除员工后，已有预约仍保留当时姓名。
     </p>
 
     <el-skeleton v-if="loading" :rows="4" animated />
-    <el-alert v-else-if="loadError" :title="loadError" type="error" :closable="false" show-icon />
+    <div v-else-if="loadError" class="page-load-error">
+      <el-alert :title="loadError" type="error" :closable="false" show-icon />
+      <el-button type="primary" @click="loadPage">重试</el-button>
+    </div>
 
-    <div v-else class="employee-manage-body">
-      <el-menu class="employee-manage-list" :default-active="editingId">
-        <el-menu-item v-if="!employees.length" index="empty" disabled>暂无员工</el-menu-item>
-        <el-menu-item v-for="item in employees" :key="item.id" :index="item.id" @click="startEdit(item)">
-          <span>
-            <strong>{{ item.name }}</strong>
-            <em :class="presenceClass(item)">{{ presenceText(item) }}</em>
-            <em>{{ projectNames(item) }}</em>
-          </span>
-        </el-menu-item>
-      </el-menu>
+    <div v-else class="desk-split">
+      <ul class="desk-list" role="listbox" aria-label="员工列表">
+        <li v-if="!employees.length">
+          <button type="button" class="desk-list-item" disabled>暂无员工</button>
+        </li>
+        <li v-for="item in employees" :key="item.id">
+          <button
+            type="button"
+            class="desk-list-item"
+            :class="{ 'is-active': editingId === item.id }"
+            role="option"
+            :aria-selected="editingId === item.id"
+            @click="startEdit(item)"
+          >
+            <span class="desk-list-title">{{ item.name }}</span>
+            <span class="desk-list-meta" :class="presenceClass(item)">{{ presenceText(item) }}</span>
+            <span class="desk-list-meta">{{ projectNames(item) }}</span>
+          </button>
+        </li>
+      </ul>
 
-      <el-card class="employee-manage-form" shadow="never">
+      <section class="desk-panel employee-manage-form">
         <h3>{{ editingId ? '编辑员工' : '新增员工' }}</h3>
         <el-form label-position="top" @submit.prevent="onSubmit">
           <el-form-item label="姓名">
@@ -473,7 +485,7 @@ onUnmounted(() => {
             </div>
           </el-form-item>
           <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
-          <div class="employee-manage-actions">
+          <div class="desk-actions">
             <el-button type="primary" native-type="submit" :loading="saving">
               {{ editingId ? '保存修改' : '添加员工' }}
             </el-button>
@@ -482,104 +494,34 @@ onUnmounted(() => {
             <el-button v-if="editingId" type="danger" :loading="saving" @click="onDelete">删除员工</el-button>
           </div>
         </el-form>
-      </el-card>
+      </section>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 员工管理：左侧列表 + 右侧表单 */
-.employee-manage-title {
-  margin: 0 0 8px;
-  font-size: 20px;
-}
-
-.employee-manage-hint {
-  margin: 0 0 16px;
-  color: #616e7c;
-  font-size: 13px;
-}
-
+/* 员工管理：值班台分栏 + 请假控件 */
 .employee-manage-empty {
   margin: 0;
-  color: #7b8794;
+  color: var(--color-text-subtle);
   font-size: 13px;
 }
 
-.employee-manage-body {
-  display: flex;
-  gap: 24px;
-  align-items: flex-start;
-}
-
-.employee-manage-list {
-  width: 280px;
-  flex-shrink: 0;
-  overflow: hidden;
-  border-right: none;
-}
-
-/* 菜单项默认 56px 行高，会把姓名顶出格子；改为随摘要行撑开 */
-.employee-manage-list :deep(.el-menu-item) {
-  height: auto;
-  line-height: 1.4;
-  /* 组件默认不换行，长姓名会撑出列宽盖住表单 */
-  white-space: normal !important;
-  overflow: hidden;
-  align-items: flex-start;
-  padding: 10px 16px;
-}
-
-/* 长姓名默认把格子撑宽，会盖住右侧表单；限制在列宽内换行 */
-.employee-manage-list :deep(.el-menu-item span) {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  max-width: 100%;
-}
-
-/* 选中的员工用底色标出，只改字色不够明显 */
-.employee-manage-list :deep(.el-menu-item.is-active) {
-  background: #e7eef5;
-}
-
-.employee-manage-list strong {
-  font-weight: 600;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.employee-manage-list em {
-  display: block;
-  font-style: normal;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #7b8794;
-  overflow-wrap: anywhere;
-}
-
-/* 当前状态：请假、在忙、空闲 */
-.employee-manage-list em.is-leave {
+/* 列表里的在岗状态色 */
+.desk-list-meta.is-leave {
   color: #9b1c1c;
 }
 
-.employee-manage-list em.is-busy {
+.desk-list-meta.is-busy {
   color: #ad6800;
 }
 
-.employee-manage-list em.is-free {
+.desk-list-meta.is-free {
   color: #0e7c3a;
 }
 
 .employee-manage-form {
-  flex: 1;
   max-width: 640px;
-}
-
-.employee-manage-form h3 {
-  margin: 0 0 12px;
-  font-size: 15px;
 }
 
 .employee-manage-leaves {
@@ -593,6 +535,11 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-bg);
+  font-size: 13px;
 }
 
 .employee-manage-leave-add {
@@ -657,10 +604,5 @@ onUnmounted(() => {
 
 :global(.employee-manage-leave-popper .el-time-panel__footer) {
   display: none;
-}
-
-.employee-manage-actions {
-  display: flex;
-  gap: 8px;
 }
 </style>

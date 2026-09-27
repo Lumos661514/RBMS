@@ -9,13 +9,31 @@ html,
 body {
   margin: 0;
   min-width: 1000px;
-  /* 不用 Inter。一套冷灰加唯一主色，登录页和后台共用 */
+  /* 值班台：冷纸面 + 石墨轨 + 深青主色；铜只作激活/主按钮 */
   font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
-  color: #1c2430;
-  background: #eef1f4;
-  --el-color-primary: #1f4e79;
-  --el-border-radius-base: 2px;
-  --el-border-radius-small: 2px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  --color-text: #12151a;
+  --color-text-muted: #5a616c;
+  --color-text-subtle: #6b7380;
+  --color-border: #d5d9e0;
+  --color-surface: #f7f8fa;
+  --color-bg: #e8eaee;
+  --color-primary: #1a4d4a;
+  --color-primary-active: #133936;
+  --color-accent: #c45c26;
+  --color-list-active: #dde8e7;
+  --color-sidebar: #16191f;
+  --color-sidebar-text: #c5ccd6;
+  --color-sidebar-muted: #8b939e;
+  --page-inset: 20px 24px;
+  --page-title-size: 20px;
+  --page-hint-size: 13px;
+  --admin-list-width: 280px;
+  --admin-rail-width: 220px;
+  --el-color-primary: var(--color-primary);
+  --el-border-radius-base: 4px;
+  --el-border-radius-small: 4px;
   --el-font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
@@ -25,4 +43,368 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* 浏览器默认面也跟色板走：选区、焦点、滚动条 */
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 28%, white);
+  color: var(--color-text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--color-primary) 35%, #c5ced6) transparent;
+}
+
+/* 管理端 / 顾客端共用页头节奏 */
+.page-title {
+  margin: 0 0 8px;
+  font-size: var(--page-title-size);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+
+.page-hint {
+  margin: 0 0 16px;
+  font-size: var(--page-hint-size);
+  line-height: 1.5;
+  color: var(--color-text-subtle);
+}
+
+/* 加载失败：提示 + 重试，避免各页各写一套 */
+.page-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  max-width: 480px;
+}
+
+/* 登录 / 注册：左右分栏值班台，不用居中白卡片 */
+.auth-shell {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(360px, 0.9fr);
+  background: var(--color-bg);
+}
+
+.auth-brand {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 48px 56px 56px;
+  color: #f2f4f7;
+  background: var(--color-sidebar);
+  overflow: hidden;
+}
+
+/* 时刻表竖线：门店排班几何，不是装饰网格底纹 */
+.auth-brand::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent 47px,
+    color-mix(in srgb, #fff 14%, transparent) 47px,
+    color-mix(in srgb, #fff 14%, transparent) 48px
+  );
+  opacity: 0;
+  animation: auth-rules-in 700ms cubic-bezier(0.16, 1, 0.3, 1) 80ms forwards;
+  pointer-events: none;
+}
+
+@keyframes auth-rules-in {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.auth-brand-mark {
+  position: relative;
+  width: 28px;
+  height: 4px;
+  margin-bottom: 20px;
+  background: var(--color-accent);
+}
+
+.auth-brand h1 {
+  position: relative;
+  margin: 0 0 16px;
+  max-width: 10ch;
+  font-size: clamp(40px, 5.2vw, 64px);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.auth-brand-lead {
+  position: relative;
+  margin: 0;
+  max-width: 28ch;
+  font-size: 17px;
+  line-height: 1.55;
+  color: color-mix(in srgb, #f2f4f7 72%, transparent);
+}
+
+.auth-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+  background: var(--color-surface);
+}
+
+.auth-panel-inner {
+  width: 100%;
+  max-width: 360px;
+}
+
+.auth-panel-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--color-text);
+}
+
+.auth-panel-lead {
+  margin: 0 0 28px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-muted);
+}
+
+.auth-panel .el-input {
+  width: 100%;
+}
+
+.auth-extra {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.auth-extra-link {
+  color: var(--color-primary);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.auth-extra-link:hover {
+  color: var(--color-accent);
+}
+
+.auth-submit {
+  width: 100%;
+  margin-top: 8px;
+  --el-button-bg-color: var(--color-primary);
+  --el-button-border-color: var(--color-primary);
+  --el-button-hover-bg-color: var(--color-accent);
+  --el-button-hover-border-color: var(--color-accent);
+  --el-button-active-bg-color: var(--color-primary-active);
+  --el-button-active-border-color: var(--color-primary-active);
+}
+
+/* 管理端左侧实体列表（项目 / 员工 / 用户） */
+.admin-side-list {
+  width: var(--admin-list-width);
+  flex-shrink: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.admin-side-list .el-menu {
+  border-right: none;
+}
+
+.admin-side-list .el-menu-item {
+  height: auto;
+  min-height: 40px;
+  line-height: 1.4;
+  white-space: normal !important;
+  padding: 10px 16px;
+}
+
+.admin-side-list .el-menu-item.is-active {
+  color: var(--color-primary) !important;
+  background-color: var(--color-list-active) !important;
+}
+
+/* —— 值班台工作面：面板 / 分栏 / 实体列表（替代 el-card + el-menu 套壳） —— */
+.desk-split {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+  min-height: 420px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.desk-list {
+  width: var(--admin-list-width);
+  flex-shrink: 0;
+  margin: 0;
+  padding: 10px 8px;
+  list-style: none;
+  border-right: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-bg) 55%, var(--color-surface));
+  overflow: auto;
+}
+
+.desk-list-item {
+  display: block;
+  width: 100%;
+  margin: 0 0 2px;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.desk-list-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+}
+
+.desk-list-item.is-active {
+  background: var(--color-list-active);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.desk-list-item:disabled {
+  cursor: default;
+  color: var(--color-text-subtle);
+}
+
+.desk-list-title {
+  display: block;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.desk-list-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--color-text-subtle);
+  overflow-wrap: anywhere;
+}
+
+.desk-list-item.is-active .desk-list-meta {
+  color: color-mix(in srgb, var(--color-primary) 70%, var(--color-text-subtle));
+}
+
+.desk-panel {
+  flex: 1;
+  min-width: 0;
+  padding: 20px 24px 24px;
+  background: var(--color-surface);
+}
+
+.desk-panel-solo {
+  max-width: 480px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 20px 24px 24px;
+  background: var(--color-surface);
+}
+
+.desk-panel h3,
+.desk-section-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--color-text);
+}
+
+.desk-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.desk-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 760px;
+}
+
+.desk-section {
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 16px 18px 18px;
+  background: var(--color-surface);
+}
+
+.desk-catalog {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.desk-catalog-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  background: var(--color-surface);
+}
+
+.desk-catalog-item h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.desk-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.desk-row:last-child {
+  border-bottom: none;
+}
+
+/* Element 表格跟纸面：去掉默认灰条，贴近账本 */
+.desk-table.el-table {
+  --el-table-border-color: var(--color-border);
+  --el-table-header-bg-color: color-mix(in srgb, var(--color-bg) 80%, #fff);
+  --el-table-row-hover-bg-color: var(--color-list-active);
+  --el-table-bg-color: var(--color-surface);
+  --el-fill-color-lighter: var(--color-surface);
 }
