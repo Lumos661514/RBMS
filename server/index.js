@@ -31,6 +31,72 @@ import { parseServiceImageUrl, serviceDescriptionText } from '../src/utils/servi
 
 const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+/** 演示站防灌库：项目/员工超过上限则拒绝新增（默认 20） */
+const DEMO_ROW_CAP = Number(process.env.DEMO_ROW_CAP || 20)
+/** 为 true 时拒绝公开注册 */
+const DISABLE_REGISTER = process.env.DISABLE_REGISTER === '1'
+/** 写接口限流：每 IP 每窗口最多次数 */
+const WRITE_RATE_LIMIT = Number(process.env.WRITE_RATE_LIMIT || 20)
+/** 写接口限流窗口（毫秒） */
+const WRITE_RATE_WINDOW_MS = Number(process.env.WRITE_RATE_WINDOW_MS || 60_000)
+
+/** IP → { count, resetAt }，进程内限流桶 */
+const writeBuckets = new Map()
+
+/**
+ * 演示站行数上限检查；超限返回失败文案，未超限返回 null。
+ * @param {'services' | 'employees'} table
+ */
+async function demoCapExceeded(table) {
+  const [rows] = await pool.query(`SELECT COUNT(*) AS c FROM ${table}`)
+  if (Number(rows[0].c) >= DEMO_ROW_CAP) {
+    return `演示站${table === 'services' ? '项目' : '员工'}数量已达上限（${DEMO_ROW_CAP}），请稍后再试`
+  }
+  return null
+}
+
+/**
+ * 取客户端 IP（信任反代带来的 X-Forwarded-For 首段）。
+ * @param {import('express').Request} req
+ */
+function clientIp(req) {
+  const forwarded = String(req.headers['x-forwarded-for'] || '')
+    .split(',')[0]
+    .trim()
+  return forwarded || req.socket?.remoteAddress || 'unknown'
+}
+
+/**
+ * 限制 /api 写操作频率，挡住扫库脚本狂刷新建。
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+function rateLimitWrites(req, res, next) {
+  if (!['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    next()
+    return
+  }
+  // 登录单独放行，避免正常输错密码也被限
+  if (req.path === '/api/login') {
+    next()
+    return
+  }
+  const ip = clientIp(req)
+  const now = Date.now()
+  let bucket = writeBuckets.get(ip)
+  if (!bucket || now >= bucket.resetAt) {
+    bucket = { count: 0, resetAt: now + WRITE_RATE_WINDOW_MS }
+    writeBuckets.set(ip, bucket)
+  }
+  bucket.count += 1
+  if (bucket.count > WRITE_RATE_LIMIT) {
+    res.status(429).json(fail('操作过于频繁，请稍后再试'))
+    return
+  }
+  next()
+}
+
 function ok(data) {
   return { code: 0, message: 'ok', data }
 }
@@ -371,6 +437,7 @@ async function requireAuth(req, res, next) {
 const app = express()
 app.use(cors())
 app.use(express.json())
+app.use(rateLimitWrites)
 
 app.post('/api/login', async (req, res, next) => {
   try {
@@ -401,6 +468,10 @@ const registerHits = []
 
 app.post('/api/register', async (req, res, next) => {
   try {
+    if (DISABLE_REGISTER) {
+      res.json(fail('演示站已关闭注册，请使用体验账号登录'))
+      return
+    }
     const phone = String(req.body?.phone || '').trim()
     const password = String(req.body?.password || '')
     const name = String(req.body?.name || '').trim()
@@ -730,6 +801,11 @@ app.post('/api/employees', requireAuth, async (req, res, next) => {
       res.json(fail('没有权限'))
       return
     }
+    const capMsg = await demoCapExceeded('employees')
+    if (capMsg) {
+      res.json(fail(capMsg))
+      return
+    }
     const [serviceRows] = await pool.query('SELECT * FROM services')
     const parsed = parseEmployeePayload(
       req.body || {},
@@ -851,6 +927,11 @@ app.post('/api/services', requireAuth, async (req, res, next) => {
   try {
     if (req.user.role !== 'admin') {
       res.json(fail('没有权限'))
+      return
+    }
+    const capMsg = await demoCapExceeded('services')
+    if (capMsg) {
+      res.json(fail(capMsg))
       return
     }
     const parsed = parseServicePayload(req.body || {}, await currentSlotMinutes())

@@ -17,7 +17,7 @@ flowchart LR
   express["Express :3000<br/>API + dist"]
   jwt["JWT 鉴权"]
   mysql[("MySQL 8<br/>booking")]
-  cron["cron<br/>每日 reset:demo"]
+  cron["cron<br/>每小时 reset:demo"]
 
   browser -->|开发| vite
   browser -->|线上| nginx
@@ -29,12 +29,12 @@ flowchart LR
 ```
 
 - **本地：** `npm run dev` 同时起 Express 与 Vite；浏览器打 Vite，接口经代理到 `:3000`。
-- **线上：** Nginx → Express；同进程托管 `dist` 静态页与 `/api`，数据在 MySQL；cron 每日 `reset:demo`。
+- **线上：** Nginx → Express；同进程托管 `dist` 静态页与 `/api`，数据在 MySQL；cron 每小时 `reset:demo`。
 
 ## 账号
 
-- 可注册普通用户，角色固定为用户，成功后进入顾客端（项目 / 我的）。
-- 管理员账号属于系统自带，登录后进入后台看板。两边菜单和路由分开，不能互相串。
+- 演示站默认关闭公开注册；登录页可一键填入「演示顾客」。
+- 店长账号系统自带，密码只在服务端 `ADMIN_PASSWORD`，不写进前端或 README；登录后进入后台看板。两边菜单和路由分开，不能互相串。
 
 ## 功能
 
@@ -66,7 +66,7 @@ npm run dev
 
 首次启动会建表；`users` 为空时只写入内置管理员，项目、员工和预约需在后台添加。之后读写都在 MySQL。密码以哈希存放，登录签发 JWT。
 
-公网演示站可用 `npm run reset:demo` 清空可变业务数据并写入固定种子（项目、员工、演示顾客）；线上建议 cron 每日执行一次。
+公网演示站可用 `npm run reset:demo` 清空可变业务数据并写入固定种子（项目、员工、演示顾客）；线上建议 cron 每小时执行，并开启 `DISABLE_REGISTER` / 写接口限流 / `DEMO_ROW_CAP`。
 
 调度规则单测：`npm test`。
 

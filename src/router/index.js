@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ROLE_KEY, TOKEN_KEY } from '@/api/request'
+import { registerEnabled } from '@/config'
 import { homePath } from '@/utils/portal'
 import Login from '@/views/Login.vue'
 import Register from '@/views/Register.vue'
@@ -18,7 +19,15 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/login', component: Login },
-    { path: '/register', component: Register },
+    // 演示站可关注册：直链 /register 也回到登录
+    {
+      path: '/register',
+      component: Register,
+      beforeEnter: (_to, _from, next) => {
+        if (!registerEnabled) next('/login')
+        else next()
+      },
+    },
     {
       path: '/',
       redirect: () => {

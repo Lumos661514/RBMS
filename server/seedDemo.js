@@ -1,11 +1,11 @@
 import { hashPassword } from './auth.js'
 import { pool } from './db.js'
 
-/** 内置店长：与 init / 登录页演示填入一致，每次重置都写回，避免线上仍是旧口令 */
+/** 内置店长：密码只来自环境变量 ADMIN_PASSWORD，不进前端包 */
 const ADMIN_USER = {
   id: 'u-admin',
   phone: '13800138001',
-  password: '050622caibowen',
+  password: process.env.ADMIN_PASSWORD || '123456',
   name: '店长',
 }
 

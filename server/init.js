@@ -6,10 +6,10 @@ import { pool } from './db.js'
 
 const schemaPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'schema.sql')
 
-/** 空库写入的内置店长，不出现在用户管理列表。 */
+/** 空库写入的内置店长，不出现在用户管理列表。密码优先读环境变量，避免写死在仓库。 */
 const ADMIN_ID = 'u-admin'
 const ADMIN_PHONE = '13800138001'
-const ADMIN_PASSWORD = '050622caibowen'
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456'
 const ADMIN_NAME = '店长'
 
 /**
