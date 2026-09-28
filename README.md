@@ -5,6 +5,32 @@
 - 在线演示：[http://120.27.130.34](http://120.27.130.34)
 - 源码：[https://github.com/Lumos661514/RBMS](https://github.com/Lumos661514/RBMS)
 
+## 运行架构
+
+交互图（Archify）：[docs/archify/runtime-architecture.html](docs/archify/runtime-architecture.html)（源数据：`docs/archify/runtime-architecture.architecture.json`）。
+
+```mermaid
+flowchart LR
+  browser["浏览器<br/>管理端 / 顾客端"]
+  vite["Vite :5173<br/>开发代理 /api"]
+  nginx["Nginx :80<br/>线上入口"]
+  express["Express :3000<br/>API + dist"]
+  jwt["JWT 鉴权"]
+  mysql[("MySQL 8<br/>booking")]
+  cron["cron<br/>每日 reset:demo"]
+
+  browser -->|开发| vite
+  browser -->|线上| nginx
+  vite -->|/api 代理| express
+  nginx -->|反代| express
+  jwt -->|校验写接口| express
+  express -->|SQL| mysql
+  cron -.->|演示种子| mysql
+```
+
+- **本地：** `npm run dev` 同时起 Express 与 Vite；浏览器打 Vite，接口经代理到 `:3000`。
+- **线上：** Nginx → Express；同进程托管 `dist` 静态页与 `/api`，数据在 MySQL；cron 每日 `reset:demo`。
+
 ## 账号
 
 - 可注册普通用户，角色固定为用户，成功后进入顾客端（项目 / 我的）。

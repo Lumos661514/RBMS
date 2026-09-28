@@ -1,0 +1,199 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "门店预约系统 · 运行架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1080, 680],
+    "views": [
+      {
+        "id": "dev-path",
+        "label": "本地开发",
+        "focus": ["browser", "vite", "express", "mysql"],
+        "note": "浏览器走 Vite，/api 代理到 Express，再访问 MySQL。"
+      },
+      {
+        "id": "prod-path",
+        "label": "线上运行",
+        "focus": ["browser", "nginx", "express", "mysql"],
+        "note": "浏览器经 Nginx 到 Express；同进程托管 dist 静态资源与 /api。"
+      },
+      {
+        "id": "auth-seed",
+        "label": "鉴权与演示重置",
+        "focus": ["express", "jwt", "mysql", "cron"],
+        "note": "JWT 校验写接口；cron 每日执行 reset:demo 冲刷演示数据。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "external",
+      "label": "浏览器",
+      "sublabel": "管理端 / 顾客端",
+      "pos": [48, 280],
+      "size": [140, 72]
+    },
+    {
+      "id": "vite",
+      "type": "frontend",
+      "label": "Vite",
+      "sublabel": "开发 :5173",
+      "brand": "vue",
+      "pos": [260, 150],
+      "size": [140, 72],
+      "tag": "proxy /api"
+    },
+    {
+      "id": "nginx",
+      "type": "cloud",
+      "label": "Nginx",
+      "sublabel": "线上 :80",
+      "pos": [260, 410],
+      "size": [140, 72],
+      "tag": "反向代理"
+    },
+    {
+      "id": "express",
+      "type": "backend",
+      "label": "Express",
+      "sublabel": ":3000 API + dist",
+      "brand": "node-js",
+      "pos": [500, 280],
+      "size": [160, 72]
+    },
+    {
+      "id": "jwt",
+      "type": "security",
+      "label": "JWT 鉴权",
+      "sublabel": "Bearer token",
+      "pos": [500, 120],
+      "size": [160, 68]
+    },
+    {
+      "id": "mysql",
+      "type": "database",
+      "label": "MySQL 8",
+      "sublabel": "booking 库",
+      "brand": "mysql",
+      "pos": [760, 280],
+      "size": [150, 72]
+    },
+    {
+      "id": "cron",
+      "type": "external",
+      "label": "cron",
+      "sublabel": "每日 reset:demo",
+      "pos": [760, 440],
+      "size": [150, 68]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "本地开发",
+      "wraps": ["vite"]
+    },
+    {
+      "kind": "region",
+      "label": "线上入口",
+      "wraps": ["nginx"]
+    },
+    {
+      "kind": "region",
+      "label": "应用进程",
+      "wraps": ["express", "jwt"]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-to-vite",
+      "from": "browser",
+      "to": "vite",
+      "label": "开发访问",
+      "variant": "emphasis",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "browser-to-nginx",
+      "from": "browser",
+      "to": "nginx",
+      "label": "线上访问",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "vite-to-express",
+      "from": "vite",
+      "to": "express",
+      "label": "/api 代理",
+      "fromSide": "right",
+      "toSide": "top",
+      "labelAt": [424, 236]
+    },
+    {
+      "id": "nginx-to-express",
+      "from": "nginx",
+      "to": "express",
+      "label": "反代 :3000",
+      "fromSide": "right",
+      "toSide": "bottom"
+    },
+    {
+      "id": "jwt-to-express",
+      "from": "jwt",
+      "to": "express",
+      "label": "校验写接口",
+      "variant": "security",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelAt": [587, 202]
+    },
+    {
+      "id": "express-to-mysql",
+      "from": "express",
+      "to": "mysql",
+      "label": "SQL",
+      "variant": "emphasis"
+    },
+    {
+      "id": "cron-to-mysql",
+      "from": "cron",
+      "to": "mysql",
+      "label": "写入演示种子",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "双入口同后端",
+      "items": [
+        "本地：Vite 托管 SPA，并把 /api 转到 Express",
+        "线上：Nginx 入口，Express 同时提供 dist 与 /api"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "双端门户",
+      "items": [
+        "管理端与顾客端是同一 Vue SPA、不同布局与路由",
+        "角色由 JWT 决定，门户互不串路由"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "演示站维护",
+      "items": [
+        "pm2 守护 Express 进程",
+        "cron 每日执行 npm run reset:demo 清空脏数据"
+      ]
+    }
+  ]
+}
