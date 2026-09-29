@@ -17,13 +17,13 @@ const DEMO_USER = {
   name: '演示顾客',
 }
 
-/** 演示项目：行业中性的时长/价格阶梯，四档都能被 30 分钟时间格整除 */
+/** 演示项目：与当前本地演示库一致。时间格 60 分钟，时长都是整小时 */
 const DEMO_SERVICES = [
   {
     id: 's-demo-basic',
     name: '基础服务',
     price: 50,
-    durationHours: 0.5,
+    durationHours: 2,
     description: '适合很快办完的常规事项。',
   },
   {
@@ -37,7 +37,7 @@ const DEMO_SERVICES = [
     id: 's-demo-premium',
     name: '高级服务',
     price: 160,
-    durationHours: 1.5,
+    durationHours: 2,
     description: '时间更宽裕，适合稍复杂的安排。',
   },
   {
@@ -109,11 +109,11 @@ export async function resetDemoData() {
       }
     }
 
-    // 30 分钟一格，0.5 / 1 / 1.5 / 2 小时的演示项目才能约上
+    // 60 分钟一格，与本地演示库一致，整小时项目才能约上
     await conn.query(
       `INSERT INTO settings (id, start_hour, end_hour, day_count, slot_minutes)
-       VALUES (1, 9, 18, 7, 30)
-       ON DUPLICATE KEY UPDATE slot_minutes = 30`,
+       VALUES (1, 9, 18, 7, 60)
+       ON DUPLICATE KEY UPDATE start_hour = 9, end_hour = 18, day_count = 7, slot_minutes = 60`,
     )
 
     await conn.commit()
