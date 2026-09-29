@@ -573,7 +573,8 @@ onMounted(loadPage)
 <style scoped>
 /* 用户管理：值班台分栏。顾客端用分页，不再把资料、预约、改密塞进一张卡片。 */
 .user-manage-account {
-  max-width: 640px;
+  width: 100%;
+  max-width: none;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   background: var(--color-surface);

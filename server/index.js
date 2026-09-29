@@ -512,7 +512,7 @@ app.post('/api/register', async (req, res, next) => {
 app.get('/api/settings', requireAuth, async (_req, res, next) => {
   try {
     const [rows] = await pool.query('SELECT * FROM settings WHERE id = 1')
-    const settings = rows[0] || { start_hour: 9, end_hour: 18, day_count: 7, slot_minutes: 60 }
+    const settings = rows[0] || { start_hour: 9, end_hour: 18, day_count: 7, slot_minutes: 30 }
     const slotMinutes = normalizeSlotMinutes(settings.slot_minutes)
     res.json(
       ok({
@@ -916,7 +916,9 @@ app.delete('/api/employees/:id', requireAuth, async (req, res, next) => {
 
 app.get('/api/services', requireAuth, async (_req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM services')
+    const [rows] = await pool.query(
+      'SELECT * FROM services ORDER BY duration_hours ASC, price ASC, id ASC',
+    )
     res.json(ok({ list: rows.map(mapService) }))
   } catch (error) {
     next(error)

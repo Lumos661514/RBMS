@@ -127,16 +127,30 @@ function logout() {
 
 .client-layout-body {
   flex: 1;
+  width: min(1120px, 100%);
   min-width: 0;
-  padding: var(--page-inset);
+  margin-inline: auto;
+  padding: 28px 24px 48px;
+}
+
+.client-layout-body :deep(.page-title) {
+  font-size: 28px;
+  letter-spacing: -0.03em;
 }
 
 @media (max-width: 720px) {
   .client-layout-bar {
     flex-wrap: wrap;
+    align-items: center;
     height: auto;
-    padding: 10px 16px 0;
+    padding: 4px 16px 0;
     gap: 0 12px;
+  }
+
+  .client-layout-brand,
+  .client-layout-user {
+    min-height: 48px;
+    padding-bottom: 10px;
   }
 
   .client-layout-brand {
@@ -162,7 +176,11 @@ function logout() {
   }
 
   .client-layout-body {
-    padding: 16px;
+    padding: 20px 16px 32px;
+  }
+
+  .client-layout-body :deep(.page-title) {
+    font-size: 24px;
   }
 }
 </style>

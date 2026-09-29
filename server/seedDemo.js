@@ -9,45 +9,52 @@ const ADMIN_USER = {
   name: '店长',
 }
 
-/** 演示顾客：与登录页一键填入账号一致 */
+/** 演示顾客：与登录页一键填入账号一致。号码是明显的占位号，不是真人手机。 */
 const DEMO_USER = {
   id: 'u-demo-customer',
-  phone: '15158572063',
+  phone: '13800000000',
   password: '88888888',
   name: '演示顾客',
 }
 
-/** 演示项目：牙科门店常见三项，够顾客端介绍与后台管理展示 */
+/** 演示项目：行业中性的时长/价格阶梯，四档都能被 30 分钟时间格整除 */
 const DEMO_SERVICES = [
   {
-    id: 's-demo-extract',
-    name: '拔牙',
-    price: 200,
-    durationHours: 1,
-    description: '拔牙前需要先吃饭，拔牙后2小时内不能吃东西',
+    id: 's-demo-basic',
+    name: '基础服务',
+    price: 50,
+    durationHours: 0.5,
+    description: '适合很快办完的常规事项。',
   },
   {
-    id: 's-demo-fill',
-    name: '补牙',
-    price: 150,
+    id: 's-demo-standard',
+    name: '标准服务',
+    price: 100,
     durationHours: 1,
-    description: '无',
+    description: '大多数到店需求用这一档。',
   },
   {
-    id: 's-demo-care',
-    name: '牙齿护理',
-    price: 120,
-    durationHours: 1,
-    description: '无',
+    id: 's-demo-premium',
+    name: '高级服务',
+    price: 160,
+    durationHours: 1.5,
+    description: '时间更宽裕，适合稍复杂的安排。',
+  },
+  {
+    id: 's-demo-custom',
+    name: '专属定制',
+    price: 260,
+    durationHours: 2,
+    description: '先沟通再安排，时长最长。',
   },
 ]
 
-/** 演示员工：四名医生，均挂全部演示项目 */
+/** 演示员工：四名顾问，均挂全部演示项目 */
 const DEMO_EMPLOYEES = [
-  { id: 'e-demo-li', name: '李医生' },
-  { id: 'e-demo-chen', name: '陈医生' },
-  { id: 'e-demo-xia', name: '夏医生' },
-  { id: 'e-demo-huang', name: '黄医生' },
+  { id: 'e-demo-lin', name: '顾问小林' },
+  { id: 'e-demo-zhou', name: '顾问小周' },
+  { id: 'e-demo-chen', name: '顾问小陈' },
+  { id: 'e-demo-wu', name: '顾问小吴' },
 ]
 
 /**
@@ -95,6 +102,13 @@ export async function resetDemoData() {
         ])
       }
     }
+
+    // 30 分钟一格，0.5 / 1 / 1.5 / 2 小时的演示项目才能约上
+    await conn.query(
+      `INSERT INTO settings (id, start_hour, end_hour, day_count, slot_minutes)
+       VALUES (1, 9, 18, 7, 30)
+       ON DUPLICATE KEY UPDATE slot_minutes = 30`,
+    )
 
     await conn.commit()
   } catch (error) {

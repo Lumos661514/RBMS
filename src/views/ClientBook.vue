@@ -142,14 +142,19 @@ const durationMismatch = computed(() => {
   return minutes < slot || minutes % slot !== 0
 })
 
-/** 看板区间内至少有一个空位的日期 */
-const bookableDates = computed(() =>
-  dayColumns.value.filter((col) =>
-    serviceEmployees.value.some((emp) =>
-      timeRows.value.some((row) => isStartBookable(col.date, emp, row.startHour)),
-    ),
-  ),
-)
+/**
+ * 看板每一天：可约开始时刻的个数（同一时刻多名员工只算一次）。
+ * 时长对不上时间格时不罗列一排「已满」。
+ */
+const dateChoices = computed(() => {
+  if (durationMismatch.value) return []
+  return dayColumns.value.map((col) => {
+    const open = timeRows.value.filter((row) =>
+      serviceEmployees.value.some((emp) => isStartBookable(col.date, emp, row.startHour)),
+    ).length
+    return { ...col, open }
+  })
+})
 
 /**
  * 该员工当天是否还有可约开始时刻。
@@ -218,6 +223,8 @@ async function loadPage() {
  * @param {string} date
  */
 function pickDate(date) {
+  const choice = dateChoices.value.find((col) => col.date === date)
+  if (!choice || choice.open === 0) return
   if (selectedDate.value !== date) {
     employeeId.value = ''
     startHour.value = null
@@ -354,23 +361,22 @@ onMounted(loadPage)
           </template>
         </p>
         <el-empty
-          v-if="!bookableDates.length"
-          :description="
-            durationMismatch
-              ? '该项目时长须为时间格的整数倍，请管理员调整项目或系统设置'
-              : '看板区间内暂无可约日期'
-          "
+          v-if="durationMismatch"
+          description="该项目时长须为时间格的整数倍，请管理员调整项目或系统设置"
         />
         <div v-else class="client-book-dates">
           <button
-            v-for="col in bookableDates"
+            v-for="col in dateChoices"
             :key="col.date"
             type="button"
             class="client-book-chip"
-            :class="{ 'is-active': selectedDate === col.date }"
+            :class="{ 'is-active': selectedDate === col.date, 'is-full': col.open === 0 }"
+            :disabled="col.open === 0"
             @click="pickDate(col.date)"
           >
-            {{ col.label }} {{ col.dateLabel }}
+            <span class="client-book-chip-week">{{ col.label }}</span>
+            <span class="client-book-chip-date">{{ col.dateLabel }}</span>
+            <span class="client-book-chip-count">{{ col.open ? `可约 ${col.open}` : '已满' }}</span>
           </button>
         </div>
         <el-alert v-if="actionError" :title="actionError" type="error" :closable="false" show-icon />
@@ -460,11 +466,12 @@ onMounted(loadPage)
 
 <style scoped>
 .client-book {
-  max-width: 720px;
+  width: 100%;
 }
 
 .client-book-steps {
-  margin: 0 0 20px;
+  max-width: 640px;
+  margin: 0 auto 24px;
 }
 
 .client-book-steps :deep(.el-step__title) {
@@ -517,7 +524,7 @@ onMounted(loadPage)
   padding: 10px 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  background: var(--color-bg);
+  background: var(--color-surface);
   color: var(--color-text);
   font: inherit;
   font-size: 13px;
@@ -526,24 +533,79 @@ onMounted(loadPage)
   transition: border-color 140ms ease, background-color 140ms ease, color 140ms ease;
 }
 
-.client-book-chip,
+.client-book-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-height: 76px;
+}
+
+.client-book-chip-week {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.client-book-chip-date {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.client-book-chip-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-primary);
+}
+
+.client-book-chip.is-full,
+.client-book-chip:disabled {
+  cursor: not-allowed;
+  background: color-mix(in srgb, var(--color-bg) 55%, var(--color-border));
+  color: var(--color-text-muted);
+}
+
+.client-book-chip.is-full .client-book-chip-week,
+.client-book-chip.is-full .client-book-chip-date,
+.client-book-chip.is-full .client-book-chip-count,
+.client-book-chip:disabled .client-book-chip-week,
+.client-book-chip:disabled .client-book-chip-date,
+.client-book-chip:disabled .client-book-chip-count {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
 .client-book-slot {
   min-height: 44px;
 }
 
-.client-book-chip:hover,
+.client-book-chip:hover:not(:disabled),
 .client-book-person:hover,
 .client-book-slot:hover:not(:disabled) {
   border-color: var(--color-primary);
 }
 
-.client-book-chip.is-active,
 .client-book-person.is-active,
 .client-book-slot.is-active {
   background: var(--color-list-active);
   border-color: var(--color-primary);
   color: var(--color-primary);
   font-weight: 600;
+}
+
+.client-book-chip.is-active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #f4f7f6;
+}
+
+.client-book-chip.is-active .client-book-chip-week,
+.client-book-chip.is-active .client-book-chip-date,
+.client-book-chip.is-active .client-book-chip-count {
+  color: #f4f7f6;
 }
 
 .client-book-person {
@@ -603,6 +665,11 @@ onMounted(loadPage)
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
+}
+
+.client-book-dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
 }
 
 .client-book-hours {

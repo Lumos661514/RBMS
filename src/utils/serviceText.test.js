@@ -10,7 +10,7 @@ describe('serviceDescriptionText', () => {
   })
 
   it('有内容的简介原样保留', () => {
-    expect(serviceDescriptionText(' 拔牙后两小时内不要进食 ')).toBe('拔牙后两小时内不要进食')
+    expect(serviceDescriptionText(' 到店后先确认时长 ')).toBe('到店后先确认时长')
   })
 })
 
