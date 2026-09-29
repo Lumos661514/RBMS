@@ -74,9 +74,15 @@ export async function resetDemoData() {
     await conn.query('DELETE FROM employees')
     await conn.query('DELETE FROM users WHERE builtin = 0')
 
+    // 旧库可能还没有密码版本列；重置前补上，改密时才能作废旧 JWT
+    const [pvCols] = await conn.query("SHOW COLUMNS FROM users LIKE 'password_version'")
+    if (!pvCols.length) {
+      await conn.query('ALTER TABLE users ADD COLUMN password_version INT NOT NULL DEFAULT 0')
+    }
+
     const adminHashed = await hashPassword(ADMIN_USER.password)
     await conn.query(
-      'UPDATE users SET password = ?, name = ?, phone = ? WHERE id = ? AND builtin = 1',
+      'UPDATE users SET password = ?, name = ?, phone = ?, password_version = password_version + 1 WHERE id = ? AND builtin = 1',
       [adminHashed, ADMIN_USER.name, ADMIN_USER.phone, ADMIN_USER.id],
     )
 

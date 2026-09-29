@@ -45,6 +45,16 @@ export async function initDatabase() {
   await migrateLeaveTimes()
   await ensureLeaveEndDate()
   await ensureServiceImageUrl()
+  await ensurePasswordVersion()
+}
+
+/**
+ * 旧库补密码版本列；改密或重置种子时 +1，用来作废已签发的 JWT。
+ */
+async function ensurePasswordVersion() {
+  const [cols] = await pool.query("SHOW COLUMNS FROM users LIKE 'password_version'")
+  if (cols.length) return
+  await pool.query('ALTER TABLE users ADD COLUMN password_version INT NOT NULL DEFAULT 0')
 }
 
 /**

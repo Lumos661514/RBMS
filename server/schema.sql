@@ -5,7 +5,8 @@ CREATE TABLE IF NOT EXISTS users (
   password VARCHAR(64) NOT NULL,
   name VARCHAR(64) NOT NULL,
   role ENUM('admin', 'user') NOT NULL DEFAULT 'user',
-  builtin TINYINT(1) NOT NULL DEFAULT 0
+  builtin TINYINT(1) NOT NULL DEFAULT 0,
+  password_version INT NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS settings (

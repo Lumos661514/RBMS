@@ -3,8 +3,8 @@ import jwt from 'jsonwebtoken'
 
 /** bcrypt 成本；演示库用户少，10 足够。 */
 const BCRYPT_ROUNDS = 10
-/** 登录态有效期，过期后前端按 401 回登录页。 */
-const JWT_EXPIRES_IN = '7d'
+/** 登录态有效期；演示站缩短，减少被盗 token 可写窗口。可用 JWT_EXPIRES_IN 覆盖。 */
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '2h'
 
 /**
  * 签名用密钥；必须由环境变量提供。
@@ -45,11 +45,37 @@ export async function verifyPassword(plain, stored) {
 }
 
 /**
- * 签发登录 JWT，payload 只放用户 id。
+ * 签发登录 JWT。pv 为密码版本，改密后旧 token 对不上即失效。
  * @param {string} userId
+ * @param {number} [passwordVersion]
  */
-export function signToken(userId) {
-  return jwt.sign({ sub: String(userId) }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN })
+export function signToken(userId, passwordVersion = 0) {
+  return jwt.sign(
+    { sub: String(userId), pv: Number(passwordVersion) || 0 },
+    JWT_SECRET,
+    { expiresIn: JWT_EXPIRES_IN },
+  )
+}
+
+/**
+ * 从 Bearer token 取出用户 id 与密码版本；过期或伪造则返回空。
+ * @param {string} token
+ * @returns {{ userId: string, passwordVersion: number } | null}
+ */
+export function claimsFromToken(token) {
+  try {
+    const payload = jwt.verify(String(token || ''), JWT_SECRET)
+    if (!payload?.sub) return null
+    return {
+      userId: String(payload.sub),
+      passwordVersion: Number(payload.pv) || 0,
+    }
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+      return null
+    }
+    throw error
+  }
 }
 
 /**
@@ -57,15 +83,7 @@ export function signToken(userId) {
  * @param {string} token
  */
 export function userIdFromToken(token) {
-  try {
-    const payload = jwt.verify(String(token || ''), JWT_SECRET)
-    return payload?.sub ? String(payload.sub) : null
-  } catch (error) {
-    if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-      return null
-    }
-    throw error
-  }
+  return claimsFromToken(token)?.userId || null
 }
 
 /**

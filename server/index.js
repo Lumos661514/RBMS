@@ -6,9 +6,9 @@ import { fileURLToPath } from 'url'
 import cors from 'cors'
 import express from 'express'
 import {
+  claimsFromToken,
   hashPassword,
   signToken,
-  userIdFromToken,
   verifyPassword,
 } from './auth.js'
 import { pool, waitForDb } from './db.js'
@@ -43,14 +43,17 @@ const WRITE_RATE_WINDOW_MS = Number(process.env.WRITE_RATE_WINDOW_MS || 60_000)
 /** IP → { count, resetAt }，进程内限流桶 */
 const writeBuckets = new Map()
 
+/** 演示站表名对应的中文，用于上限提示 */
+const DEMO_CAP_LABEL = { services: '项目', employees: '员工', bookings: '预约' }
+
 /**
  * 演示站行数上限检查；超限返回失败文案，未超限返回 null。
- * @param {'services' | 'employees'} table
+ * @param {'services' | 'employees' | 'bookings'} table
  */
 async function demoCapExceeded(table) {
   const [rows] = await pool.query(`SELECT COUNT(*) AS c FROM ${table}`)
   if (Number(rows[0].c) >= DEMO_ROW_CAP) {
-    return `演示站${table === 'services' ? '项目' : '员工'}数量已达上限（${DEMO_ROW_CAP}），请稍后再试`
+    return `演示站${DEMO_CAP_LABEL[table]}数量已达上限（${DEMO_ROW_CAP}），请稍后再试`
   }
   return null
 }
@@ -120,10 +123,14 @@ function publicUser(user) {
 async function currentUser(req) {
   const raw = req.headers.authorization || ''
   const token = String(raw).replace(/^Bearer\s+/i, '').trim()
-  const userId = userIdFromToken(token)
-  if (!userId) return null
-  const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [userId])
-  return rows[0] ? mapUser(rows[0]) : null
+  const claims = claimsFromToken(token)
+  if (!claims) return null
+  const [rows] = await pool.query('SELECT * FROM users WHERE id = ?', [claims.userId])
+  if (!rows[0]) return null
+  const user = mapUser(rows[0])
+  // 无 pv 的旧 token，或密码版本对不上，一律视为未登录
+  if (claims.passwordVersion !== user.passwordVersion) return null
+  return user
 }
 
 /**
@@ -137,6 +144,7 @@ function mapUser(row) {
     name: row.name,
     role: row.role,
     builtin: Boolean(row.builtin),
+    passwordVersion: Number(row.password_version) || 0,
   }
 }
 
@@ -296,14 +304,37 @@ async function listEmployees(conn = pool) {
 }
 
 /**
+ * 名称/简介字符集：中英文数字与少量标点。
+ * @param {string} text
+ */
+function allowedText(text) {
+  return /^[\u4e00-\u9fffA-Za-z0-9·.\-\s，。！？、；：""''（）]+$/.test(text)
+}
+
+/**
+ * 拒绝扫库灌入的长串无意义汉字。名称连续汉字最多 4 个。
+ * @param {string} text
+ * @param {number} maxLen
+ * @param {number} [maxRun]
+ */
+function readableName(text, maxLen, maxRun = 4) {
+  const value = String(text || '').trim()
+  if (!value || value.length > maxLen) return null
+  if (!allowedText(value)) return null
+  const run = new RegExp(`[\\u4e00-\\u9fff]{${maxRun + 1},}`)
+  if (run.test(value)) return null
+  return value
+}
+
+/**
  * @param {object} payload
  * @param {object[]} services
  * @param {{ open: number, close: number }} windowMinutes 营业时间，分钟
  */
 function parseEmployeePayload(payload, services, windowMinutes) {
-  const name = String(payload.name || '').trim()
+  const name = readableName(payload.name, 16)
   const serviceIds = Array.isArray(payload.serviceIds) ? payload.serviceIds.map(String) : []
-  if (!name) return { ok: false, message: '请填写员工姓名' }
+  if (!name) return { ok: false, message: '员工姓名过长或含无法识别的字符' }
   if (!serviceIds.length) return { ok: false, message: '请至少选择一个可做项目' }
   const validIds = new Set((services || []).map((item) => item.id))
   if (serviceIds.some((id) => !validIds.has(id))) {
@@ -398,11 +429,16 @@ async function currentSlotMinutes() {
  * @param {number} slotMinutes 当前时间格；时长须为其整数倍
  */
 function parseServicePayload(payload, slotMinutes) {
-  const name = String(payload.name || '').trim()
+  const name = readableName(payload.name, 20)
   const description = serviceDescriptionText(payload.description)
   const price = Number(payload.price)
   const durationHours = Number(payload.durationHours)
-  if (!name) return { ok: false, message: '请填写服务名称' }
+  if (!name) return { ok: false, message: '项目名称过长或含无法识别的字符' }
+  if (description && description !== '无') {
+    if (!readableName(description, 80, 12)) {
+      return { ok: false, message: '简介过长或含无法识别的字符' }
+    }
+  }
   if (!Number.isFinite(price) || price < 0) return { ok: false, message: '价格须为非负数字' }
   if (!Number.isFinite(durationHours) || durationHours < 0.5 || Math.round(durationHours * 2) !== durationHours * 2) {
     return { ok: false, message: '服务时长须为至少 0.5 小时，且为 0.5 的倍数' }
@@ -452,7 +488,7 @@ app.post('/api/login', async (req, res, next) => {
     const user = mapUser(row)
     res.json(
       ok({
-        token: signToken(user.id),
+        token: signToken(user.id, user.passwordVersion),
         name: user.name,
         role: user.role,
         userId: user.id,
@@ -616,6 +652,16 @@ async function createBookingOnce(req, res) {
   try {
     const me = req.user
     const payload = req.body || {}
+    const capMsg = await demoCapExceeded('bookings')
+    if (capMsg) {
+      res.json(fail(capMsg))
+      return
+    }
+    const remark = String(payload.remark || '').trim()
+    if (remark && !readableName(remark, 40, 8)) {
+      res.json(fail('备注过长或含无法识别的字符'))
+      return
+    }
     await conn.beginTransaction()
     // 锁当天进行中预约，二次校验员工占用与用户同时段唯一，避免并发双写下重复占用
     await conn.query("SELECT id FROM bookings WHERE date = ? AND status = 'active' FOR UPDATE", [
@@ -700,7 +746,7 @@ async function createBookingOnce(req, res) {
       contactName: targetUser.name,
       contactPhone: targetUser.phone,
       price: service.price,
-      remark: payload.remark || '',
+      remark,
       status: 'active',
     }
     await conn.query(
@@ -1068,7 +1114,10 @@ app.put('/api/users/:id/password', requireAuth, async (req, res, next) => {
       nextPassword = checked.password
     }
     const hashed = await hashPassword(nextPassword)
-    await pool.query('UPDATE users SET password = ? WHERE id = ?', [hashed, target.id])
+    await pool.query(
+      'UPDATE users SET password = ?, password_version = password_version + 1 WHERE id = ?',
+      [hashed, target.id],
+    )
     res.json(ok({ id: target.id }))
   } catch (error) {
     next(error)
