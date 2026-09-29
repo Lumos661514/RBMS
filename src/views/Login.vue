@@ -3,7 +3,6 @@ import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 import { login } from '@/api/auth'
 import { saveSession } from '@/api/request'
-import { registerEnabled } from '@/config'
 import { homePath, isPathForRole } from '@/utils/portal'
 
 const route = useRoute()
@@ -18,9 +17,10 @@ const errorText = ref('')
 /** 登录请求进行中 */
 const submitting = ref(false)
 
-/** 仅公开演示顾客；店长密码不进前端包 */
+/** 演示站体验账号，点一行即可填入 */
 const demoAccounts = [
   { role: '演示顾客', phone: '13800000000', password: '88888888' },
+  { role: '店长', phone: '13800138001', password: 'caibowen661514' },
 ]
 
 /**
@@ -85,7 +85,7 @@ async function onSubmit() {
               placeholder="请输入密码"
             />
           </el-form-item>
-          <div v-if="registerEnabled" class="auth-extra">
+          <div class="auth-extra">
             <RouterLink class="auth-extra-link" to="/register">注册账号</RouterLink>
           </div>
           <!-- 体验账号只为演示站能直接走通预约，点按角色填入 -->

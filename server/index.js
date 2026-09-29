@@ -35,6 +35,8 @@ const rootDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DEMO_ROW_CAP = Number(process.env.DEMO_ROW_CAP || 20)
 /** 为 true 时拒绝公开注册 */
 const DISABLE_REGISTER = process.env.DISABLE_REGISTER === '1'
+/** 为 true 时线上只读：登录以外的写操作一律拒绝 */
+const READ_ONLY = process.env.READ_ONLY === '1'
 /** 写接口限流：每 IP 每窗口最多次数 */
 const WRITE_RATE_LIMIT = Number(process.env.WRITE_RATE_LIMIT || 20)
 /** 写接口限流窗口（毫秒） */
@@ -98,6 +100,20 @@ function rateLimitWrites(req, res, next) {
     return
   }
   next()
+}
+
+/**
+ * 只读演示站：登录可以，其余增删改一律拒绝。
+ * @param {import('express').Request} req
+ * @param {import('express').Response} res
+ * @param {import('express').NextFunction} next
+ */
+function rejectReadonlyWrites(req, res, next) {
+  if (!READ_ONLY || !['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method) || req.path === '/api/login') {
+    next()
+    return
+  }
+  res.json(fail('演示站为只读，不能修改数据'))
 }
 
 function ok(data) {
@@ -473,6 +489,7 @@ async function requireAuth(req, res, next) {
 const app = express()
 app.use(cors())
 app.use(express.json())
+app.use(rejectReadonlyWrites)
 app.use(rateLimitWrites)
 
 app.post('/api/login', async (req, res, next) => {

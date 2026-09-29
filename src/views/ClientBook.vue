@@ -172,6 +172,7 @@ const daySlots = computed(() => {
   if (!selectedDate.value || !employee || !service) return []
   return timeRows.value.map((row) => ({
     startHour: row.startHour,
+    // 结束时间按项目时长，2 小时项目显示 9:00–11:00，而不是一格的长度
     label: `${formatClockFromHour(row.startHour)}–${formatClockFromHour(row.startHour + service.durationHours)}`,
     reason: slotReason(selectedDate.value, employee, row.startHour),
   }))
