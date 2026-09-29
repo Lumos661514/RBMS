@@ -23,8 +23,8 @@ const DEMO_SERVICES = [
     id: 's-demo-basic',
     name: '基础服务',
     price: 50,
-    durationHours: 2,
-    description: '适合很快办完的常规事项。',
+    durationHours: 1,
+    description: '适合常规事项。',
   },
   {
     id: 's-demo-standard',
@@ -44,7 +44,7 @@ const DEMO_SERVICES = [
     id: 's-demo-custom',
     name: '专属定制',
     price: 260,
-    durationHours: 2,
+    durationHours: 3,
     description: '先沟通再安排，时长最长。',
   },
 ]
