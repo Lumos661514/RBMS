@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import 'element-plus/es/components/message/style/css'
 import { USER_ID_KEY } from '@/api/request'
 import { createBooking, getBookings, getOccupancy } from '@/api/booking'
 import { getEmployees } from '@/api/employees'

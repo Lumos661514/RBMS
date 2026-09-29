@@ -2,6 +2,9 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+// 命令式调用不走模板按需，样式要单独挂上
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { deleteUser, getUserDetail, getUsers, updateUserPassword } from '@/api/user'
 import { cancelBooking } from '@/api/booking'
 import { ROLE_KEY, USER_ID_KEY } from '@/api/request'

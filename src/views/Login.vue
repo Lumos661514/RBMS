@@ -1,8 +1,7 @@
 <script setup>
 import { ref } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
-import { login } from '@/api/auth'
-import { saveSession } from '@/api/request'
+import { saveSession } from '@/api/session'
 import { homePath, isPathForRole } from '@/utils/portal'
 
 const route = useRoute()
@@ -44,6 +43,7 @@ async function onSubmit() {
   }
   submitting.value = true
   try {
+    const { login } = await import('@/api/auth')
     const data = await login({ phone: phone.value.trim(), password: password.value })
     saveSession(data)
     const fallback = homePath(data.role)

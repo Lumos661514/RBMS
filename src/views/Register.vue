@@ -2,7 +2,7 @@
 import { ref } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 import { login, register } from '@/api/auth'
-import { saveSession } from '@/api/request'
+import { saveSession } from '@/api/session'
 import { homePath } from '@/utils/portal'
 
 const router = useRouter()

@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { createService, deleteService, getServices, updateService } from '@/api/services'
 import { formatDurationText } from '@/utils/schedule'
 import { parseServiceImageUrl, serviceDescriptionText } from '@/utils/serviceText'

@@ -1,6 +1,8 @@
 <script setup>
 import { onMounted, onUnmounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import 'element-plus/es/components/message/style/css'
+import 'element-plus/es/components/message-box/style/css'
 import { createEmployee, deleteEmployee, getEmployees, updateEmployee } from '@/api/employees'
 import { getBookings } from '@/api/booking'
 import { getServices } from '@/api/services'

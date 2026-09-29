@@ -53,8 +53,9 @@ textarea {
   font: inherit;
 }
 
-/* 主按钮悬停加深，不用被冲淡的 light-3；禁用态用深字配浅青底，保证对比 */
-.el-button--primary {
+/* 主按钮悬停加深，不用被冲淡的 light-3；禁用态用深字配浅青底，保证对比。
+   body 前缀压过按需 CSS 后加载的 .el-button--primary，避免主题被组件样式盖回去。 */
+body .el-button--primary {
   --el-button-hover-bg-color: var(--color-primary-active);
   --el-button-hover-border-color: var(--color-primary-active);
   --el-button-hover-text-color: #fff;
@@ -66,9 +67,9 @@ textarea {
   --el-button-disabled-border-color: #c5d4d1;
 }
 
-.el-button--primary.is-disabled,
-.el-button--primary.is-disabled:hover,
-.el-button--primary.is-disabled:focus {
+body .el-button--primary.is-disabled,
+body .el-button--primary.is-disabled:hover,
+body .el-button--primary.is-disabled:focus {
   color: #3d524f;
   background-color: #e4ebea;
   border-color: #c5d4d1;
@@ -262,7 +263,7 @@ textarea {
   }
 }
 
-.auth-submit {
+body .auth-submit {
   width: 100%;
   margin-top: 8px;
   --el-button-bg-color: var(--color-primary);

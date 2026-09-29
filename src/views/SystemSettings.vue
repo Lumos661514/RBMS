@@ -1,6 +1,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import 'element-plus/es/components/message/style/css'
 import { getSettings, updateSettings } from '@/api/settings'
 import {
   DAY_COUNT_DEFAULT,
