@@ -916,7 +916,9 @@ app.delete('/api/employees/:id', requireAuth, async (req, res, next) => {
 
 app.get('/api/services', requireAuth, async (_req, res, next) => {
   try {
-    const [rows] = await pool.query('SELECT * FROM services')
+    const [rows] = await pool.query(
+      'SELECT * FROM services ORDER BY duration_hours ASC, price ASC, id ASC',
+    )
     res.json(ok({ list: rows.map(mapService) }))
   } catch (error) {
     next(error)
