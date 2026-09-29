@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS settings (
   start_hour INT NOT NULL,
   end_hour INT NOT NULL,
   day_count INT NOT NULL,
-  slot_minutes INT NOT NULL
+  slot_minutes INT NOT NULL DEFAULT 30
 );
 
 CREATE TABLE IF NOT EXISTS services (

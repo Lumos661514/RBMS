@@ -39,7 +39,7 @@ export async function initDatabase() {
   const [settings] = await pool.query('SELECT id FROM settings WHERE id = 1')
   if (!settings.length) {
     await pool.query(
-      'INSERT INTO settings (id, start_hour, end_hour, day_count, slot_minutes) VALUES (1, 9, 18, 7, 60)',
+      'INSERT INTO settings (id, start_hour, end_hour, day_count, slot_minutes) VALUES (1, 9, 18, 7, 30)',
     )
   }
   await migrateLeaveTimes()

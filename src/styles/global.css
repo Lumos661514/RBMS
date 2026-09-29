@@ -32,6 +32,14 @@ body {
   --admin-list-width: 280px;
   --admin-rail-width: 220px;
   --el-color-primary: var(--color-primary);
+  --el-color-primary-rgb: 26, 77, 74;
+  /* 由 #1a4d4a 向白/黑混合，避免禁用按钮还停在 Element 默认浅蓝 */
+  --el-color-primary-light-3: #5f8280;
+  --el-color-primary-light-5: #8da6a5;
+  --el-color-primary-light-7: #bacac9;
+  --el-color-primary-light-8: #d1dbdb;
+  --el-color-primary-light-9: #e8eded;
+  --el-color-primary-dark-2: #153e3b;
   --el-border-radius-base: 4px;
   --el-border-radius-small: 4px;
   --el-font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Noto Sans SC", sans-serif;
@@ -43,6 +51,27 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/* 主按钮悬停加深，不用被冲淡的 light-3；禁用态用深字配浅青底，保证对比 */
+.el-button--primary {
+  --el-button-hover-bg-color: var(--color-primary-active);
+  --el-button-hover-border-color: var(--color-primary-active);
+  --el-button-hover-text-color: #fff;
+  --el-button-active-bg-color: #0f2e2c;
+  --el-button-active-border-color: #0f2e2c;
+  --el-button-active-text-color: #fff;
+  --el-button-disabled-text-color: #3d524f;
+  --el-button-disabled-bg-color: #e4ebea;
+  --el-button-disabled-border-color: #c5d4d1;
+}
+
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover,
+.el-button--primary.is-disabled:focus {
+  color: #3d524f;
+  background-color: #e4ebea;
+  border-color: #c5d4d1;
 }
 
 /* 浏览器默认面也跟色板走：选区、焦点、滚动条 */
@@ -353,6 +382,7 @@ textarea {
 
 .desk-panel-solo {
   max-width: 480px;
+  margin-inline: auto;
   border: 1px solid var(--color-border);
   border-radius: 4px;
   padding: 20px 24px 24px;
@@ -380,6 +410,7 @@ textarea {
   flex-direction: column;
   gap: 16px;
   max-width: 760px;
+  margin-inline: auto;
 }
 
 .desk-section {

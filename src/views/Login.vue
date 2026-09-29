@@ -20,7 +20,7 @@ const submitting = ref(false)
 
 /** 仅公开演示顾客；店长密码不进前端包 */
 const demoAccounts = [
-  { role: '演示顾客', phone: '15158572063', password: '88888888' },
+  { role: '演示顾客', phone: '13800000000', password: '88888888' },
 ]
 
 /**
