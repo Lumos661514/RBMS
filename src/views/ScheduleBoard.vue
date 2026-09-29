@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import 'element-plus/es/components/message/style/css'
 import { NAME_KEY, ROLE_KEY, USER_ID_KEY } from '@/api/request'
 import { getSettings } from '@/api/settings'
 import { cancelBooking, createBooking, getBookings } from '@/api/booking'

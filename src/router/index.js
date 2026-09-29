@@ -1,18 +1,19 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { ROLE_KEY, TOKEN_KEY } from '@/api/request'
+import { ROLE_KEY, TOKEN_KEY } from '@/api/session'
 import { homePath } from '@/utils/portal'
 import Login from '@/views/Login.vue'
-import Register from '@/views/Register.vue'
-import AppLayout from '@/views/AppLayout.vue'
-import ClientLayout from '@/views/ClientLayout.vue'
-import ScheduleBoard from '@/views/ScheduleBoard.vue'
-import UserManage from '@/views/UserManage.vue'
-import SystemSettings from '@/views/SystemSettings.vue'
-import ServiceIntro from '@/views/ServiceIntro.vue'
-import ServiceManage from '@/views/ServiceManage.vue'
-import EmployeeManage from '@/views/EmployeeManage.vue'
-import OpsStats from '@/views/OpsStats.vue'
-import ClientBook from '@/views/ClientBook.vue'
+
+const Register = () => import('@/views/Register.vue')
+const AppLayout = () => import('@/views/AppLayout.vue')
+const ClientLayout = () => import('@/views/ClientLayout.vue')
+const ScheduleBoard = () => import('@/views/ScheduleBoard.vue')
+const UserManage = () => import('@/views/UserManage.vue')
+const SystemSettings = () => import('@/views/SystemSettings.vue')
+const ServiceIntro = () => import('@/views/ServiceIntro.vue')
+const ServiceManage = () => import('@/views/ServiceManage.vue')
+const EmployeeManage = () => import('@/views/EmployeeManage.vue')
+const OpsStats = () => import('@/views/OpsStats.vue')
+const ClientBook = () => import('@/views/ClientBook.vue')
 
 const router = createRouter({
   history: createWebHistory(),

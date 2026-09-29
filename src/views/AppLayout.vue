@@ -1,6 +1,7 @@
 <script setup>
 import { useRoute, useRouter, RouterLink } from 'vue-router'
-import { NAME_KEY, clearSession } from '@/api/request'
+import { NAME_KEY, clearSession } from '@/api/session'
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,6 +35,7 @@ function logout() {
 </script>
 
 <template>
+  <el-config-provider :locale="zhCn">
   <el-container class="app-layout">
     <el-aside class="app-layout-side" width="220px">
       <div class="app-layout-brand">
@@ -63,6 +65,7 @@ function logout() {
       </el-main>
     </el-container>
   </el-container>
+  </el-config-provider>
 </template>
 
 <style scoped>

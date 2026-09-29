@@ -14,7 +14,7 @@ flowchart LR
   browser["浏览器<br/>管理端 / 顾客端"]
   vite["Vite :5173<br/>开发代理 /api"]
   nginx["Nginx :80<br/>线上入口"]
-  express["Express :3000<br/>API + dist"]
+  express["Express :3000<br/>/api"]
   jwt["JWT 鉴权"]
   mysql[("MySQL 8<br/>booking")]
   cron["cron<br/>每小时 reset:demo"]
@@ -22,14 +22,15 @@ flowchart LR
   browser -->|开发| vite
   browser -->|线上| nginx
   vite -->|/api 代理| express
-  nginx -->|反代| express
+  nginx -->|静态 dist| browser
+  nginx -->|/api| express
   jwt -->|校验写接口| express
   express -->|SQL| mysql
   cron -.->|演示种子| mysql
 ```
 
 - **本地：** `npm run dev` 同时起 Express 与 Vite；浏览器打 Vite，接口经代理到 `:3000`。
-- **线上：** Nginx → Express；同进程托管 `dist` 静态页与 `/api`，数据在 MySQL；cron 每小时 `reset:demo`。
+- **线上：** Nginx 托管 `dist`（gzip、`/assets/` 长期缓存），`/api` 反代到 Express；数据在 MySQL；cron 每小时 `reset:demo`。配置见 `deploy/nginx.conf`，首屏优化说明见 `docs/性能优化.md`。
 
 ## 账号
 
