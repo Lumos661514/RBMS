@@ -2,7 +2,6 @@
 
 面向服务类门店：顾客端预约、管理端后台。前端 Vue 3 + Vite + Element Plus，后端 Node.js + Express，数据存 MySQL。开发时浏览器访问前端，`/api` 由 Vite 转到 Express，看起来仍是同域。
 
-- 在线演示：[http://120.27.130.34](http://120.27.130.34)
 - 源码：[https://github.com/Lumos661514/RBMS](https://github.com/Lumos661514/RBMS)
 
 ## 运行架构
